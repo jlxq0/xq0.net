@@ -238,12 +238,19 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        if (lower === 'sudo') {
+        // helper: matches "word" or "word <anything>"
+        function startsWord(s, w) { return s === w || s.indexOf(w + ' ') === 0; }
+
+        // ---- sandwich (xkcd) — must come before generic sudo handler ----
+        if (lower === 'sudo make me a sandwich') { term.echo('Okay.'); return; }
+        if (lower === 'make me a sandwich')      { term.echo('What? Make it yourself.'); return; }
+
+        if (startsWord(lower, 'sudo')) {
             term.echo('Permission denied: DHARMA security clearance required.');
             return;
         }
 
-        if (lower === 'rm -rf /' || lower === 'rm -rf /*') {
+        if (startsWord(lower, 'rm')) {
             term.echo("I'm afraid I can't let you do that, Dave.");
             return;
         }
@@ -278,8 +285,29 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        if (lower === 'vim' || lower === 'nano' || lower === 'emacs') {
+        if (startsWord(lower, 'vim') || startsWord(lower, 'nano') || startsWord(lower, 'emacs')) {
             term.echo('There is no editor here. Just stay a while.');
+            return;
+        }
+
+        if (startsWord(lower, 'ssh')) {
+            term.echo("Connection refused. (You can't get there from here.)");
+            return;
+        }
+
+        if (startsWord(lower, 'ping')) {
+            term.echo('ping: cannot resolve host.');
+            return;
+        }
+
+        if (startsWord(lower, 'git')) {
+            term.echo('fatal: not a git repository.');
+            return;
+        }
+
+        if (startsWord(lower, 'man')) {
+            var manTarget = cmd.length > 4 ? cmd.substr(4) : '?';
+            term.echo('No manual entry for ' + manTarget + '.');
             return;
         }
 
