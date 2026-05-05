@@ -81,8 +81,19 @@ jQuery(document).ready(function($) {
         'Hanso Pte Ltd: Microsoft 365 + AI consulting.',
         'Side projects, photography, woodworking, mechanical keyboards.',
         '',
-        'Type "contact" for ways to reach me.'
+        'Type "contact" for ways to reach me, or "projects" for what I make.'
     ].join('\n');
+
+    // ---------- projects ----------
+    var PROJECTS = [
+        ['Hanso',                  'https://hanso.group',          'Microsoft 365 + AI consulting'],
+        ['Kampong Social',         'https://www.kampong.social',   'fediverse / community'],
+        ['Lenno',                  'https://www.lenno.ai',          'AI · closed beta'],
+        ['Outa',                   'https://www.outa.app',          'meditation'],
+        ['Sleepless in Singapore', 'https://www.sleepless.sg',      'podcast'],
+        ['Locolust',               'https://www.locolust.com',      'travel blog'],
+        ['Yuzu',                   'https://github.com/jlxq0/yuzu', 'anti-censorship tunnel · OSS']
+    ];
 
     // ---------- dharma stations ----------
     var STATIONS = {
@@ -140,7 +151,7 @@ jQuery(document).ready(function($) {
     }
 
     // ---------- known commands (for tab completion) ----------
-    var COMMANDS = ['help', 'contact', 'about', 'whoami', 'now', 'posts', 'theme', 'jungle', 'clear'];
+    var COMMANDS = ['help', 'contact', 'about', 'whoami', 'now', 'posts', 'projects', 'theme', 'jungle', 'clear'];
     var THEME_COMMANDS = $.map(THEMES, function(t) { return 'theme ' + t; });
     var COMPLETIONS = COMMANDS.concat(THEME_COMMANDS);
 
@@ -151,10 +162,10 @@ jQuery(document).ready(function($) {
 
         // ---- the numbers (always wins, also restores from system failure) ----
         if (cmd === '4 8 15 16 23 42') {
-            term.echo("I knew you'd try that. ;-)");
             if (systemFailed) {
                 term.echo('System restored.');
             } else {
+                term.echo("I knew you'd try that. ;-)");
                 term.echo('Countdown reset.');
             }
             resetCountdown();
@@ -162,10 +173,11 @@ jQuery(document).ready(function($) {
         }
 
         // ---- core commands ----
-        if (lower === 'help') {
+        if (lower === 'help' || lower === '?') {
             term.echo('Commands:');
             term.echo('  contact   — how to reach me');
             term.echo('  about     — short bio (alias: whoami)');
+            term.echo('  projects  — things I work on');
             term.echo('  now       — current local time + a quote');
             term.echo('  posts     — last 5 Mastodon posts');
             term.echo('  theme X   — switch theme: ' + THEMES.join(', '));
@@ -176,12 +188,12 @@ jQuery(document).ready(function($) {
         }
 
         if (lower === 'contact') {
-            // Matrix link wrapped in jQuery Terminal link syntax so the colon
-            // doesn't truncate the auto-detected URL.
+            // Matrix URL uses %3A instead of ":" so the autolinker doesn't
+            // truncate at the colon. matrix.to accepts both forms.
             term.echo(
                 'Mail:         julian@lindner.earth\n' +
                 'Mastodon:     https://mastodon.kampong.social/@julian\n' +
-                'Matrix:       [[!;;;;https://matrix.to/#/@julian:kampong.social]https://matrix.to/#/@julian:kampong.social]\n' +
+                'Matrix:       https://matrix.to/#/@julian%3Akampong.social\n' +
                 'Instagram:    https://instagram.com/jlxq0\n' +
                 '500px:        https://500px.com/jlxq0\n' +
                 'Speakerdeck:  https://speakerdeck.com/jlxq0\n' +
@@ -208,6 +220,14 @@ jQuery(document).ready(function($) {
             return;
         }
 
+        if (lower === 'projects') {
+            $.each(PROJECTS, function(i, p) {
+                var label = (p[0] + '                        ').substr(0, 24);
+                term.echo(label + p[1] + '   — ' + p[2]);
+            });
+            return;
+        }
+
         if (lower.indexOf('theme') === 0) {
             var parts = cmd.split(/\s+/);
             if (parts.length === 1) {
@@ -227,8 +247,41 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        if (lower === 'clear') {
+        if (lower === 'clear' || lower === 'cls') {
             term.clear();
+            return;
+        }
+
+        // ---- shell-ish aliases & jokes ----
+        if (lower === 'ls' || lower === 'll' || lower === 'la' || lower === 'dir') {
+            term.echo('cv.pdf            numbers.dat       please-execute');
+            term.echo('readme.txt        secrets.enc       you-found-me.txt');
+            return;
+        }
+
+        if (lower === 'pwd')                                     { term.echo('/island'); return; }
+        if (lower === 'whoami' || lower === 'who am i')          { term.echo(ABOUT); return; }
+        if (lower === 'who')                                     { term.echo('Just you. And the Others.'); return; }
+        if (lower === 'date' || lower === 'time')                { term.echo(new Date().toString()); return; }
+        if (lower === 'uptime')                                  { term.echo('up since 2014. mostly.'); return; }
+        if (lower === 'history')                                 { term.echo('Use the up arrow.'); return; }
+        if (lower === 'exit' || lower === 'quit' || lower === 'logout' || lower === 'q' || lower === ':q' || lower === ':q!' || lower === ':wq') {
+            term.echo("Nice try. You can't leave.");
+            return;
+        }
+        if (startsWord(lower, 'echo')) {
+            term.echo(cmd.length > 5 ? cmd.substr(5) : '');
+            return;
+        }
+        if (startsWord(lower, 'which') || startsWord(lower, 'whereis')) {
+            term.echo('/usr/local/bin/' + (cmd.split(/\s+/)[1] || '?'));
+            return;
+        }
+        if (lower === 'top' || lower === 'htop' || lower === 'ps') {
+            term.echo('PID  USER     COMMAND');
+            term.echo('  1  julian   /sbin/init');
+            term.echo(' 42  julian   contemplating');
+            term.echo('108  julian   pushing the button');
             return;
         }
 
@@ -311,14 +364,18 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        if (lower === 'hello' || lower === 'hi' || lower === 'hey') {
-            term.echo("Hi. Type 'help' if you're new here.");
+        if (startsWord(lower, 'decrypt') || startsWord(lower, 'crack') || startsWord(lower, 'unlock')) {
+            term.echo("I'm afraid that's classified.");
             return;
         }
 
-        if (lower === 'ls' || lower === 'dir') {
-            term.echo('cv.pdf            numbers.dat       please-execute');
-            term.echo('readme.txt        secrets.enc       you-found-me.txt');
+        if (lower.charAt(0) === '.' && lower.charAt(1) === '/') {
+            term.echo('Permission denied: not executable.');
+            return;
+        }
+
+        if (lower === 'hello' || lower === 'hi' || lower === 'hey') {
+            term.echo("Hi. Type 'help' if you're new here.");
             return;
         }
 
@@ -337,7 +394,7 @@ jQuery(document).ready(function($) {
         term.echo("Unknown command (try 'help').");
     }, {
         prompt: '>: ',
-        name: 'xq0',
+        name: 'lindner',
         greetings: null,
         completion: COMPLETIONS,
         history: true
