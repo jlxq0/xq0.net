@@ -150,10 +150,15 @@ jQuery(document).ready(function($) {
         });
     }
 
-    // ---------- known commands (for tab completion) ----------
-    var COMMANDS = ['help', 'contact', 'about', 'whoami', 'now', 'posts', 'projects', 'theme', 'jungle', 'clear'];
-    var THEME_COMMANDS = $.map(THEMES, function(t) { return 'theme ' + t; });
-    var COMPLETIONS = COMMANDS.concat(THEME_COMMANDS);
+    // ---------- let browser shortcuts (cmd+L, cmd+T, cmd+R, etc.) pass through ----------
+    // jQuery Terminal grabs keydown at document level and preventDefaults
+    // everything. Run a capture-phase handler first that stops propagation
+    // for any modifier combo so the browser handles them normally.
+    document.addEventListener('keydown', function(e) {
+        if (e.metaKey || e.ctrlKey) {
+            e.stopImmediatePropagation();
+        }
+    }, true);
 
     // ---------- terminal ----------
     var term = $('#term').terminal(function(command, term) {
@@ -183,7 +188,7 @@ jQuery(document).ready(function($) {
             term.echo('  theme X   — switch theme: ' + THEMES.join(', '));
             term.echo('  clear     — clear the screen');
             term.echo('');
-            term.echo('Some things are hidden. Tab completes; arrow keys recall history.');
+            term.echo('Some things are hidden. Arrow keys recall history.');
             return;
         }
 
@@ -396,7 +401,6 @@ jQuery(document).ready(function($) {
         prompt: '>: ',
         name: 'lindner',
         greetings: null,
-        completion: COMPLETIONS,
         history: true
     });
 
