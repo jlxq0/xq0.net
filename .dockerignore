@@ -1,8 +1,6 @@
 .git
 .forgejo
 k8s
-Dockerfile
-Caddyfile
 CNAME
 README.md
 .dockerignore
