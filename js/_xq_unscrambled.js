@@ -150,6 +150,201 @@ jQuery(document).ready(function($) {
         });
     }
 
+    // ---------- island chat: on-device LLM via WebLLM (WebGPU, no backend) ----------
+    // The model runs entirely in the visitor's browser. Weights are fetched
+    // once from HuggingFace's CDN and cached by the browser; this site only
+    // serves the glue code below.
+    var WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm';
+    var CHAT_MODELS = {
+        big:   { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', size: '~1.8 GB' },
+        small: { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', size: '~0.9 GB' }
+    };
+
+    var chatEngine = null;
+    var chatState = 'idle';   // idle | awaiting-consent | loading | ready | generating | failed
+    var chatHistory = [];
+    var chatOffered = false;
+    var pendingQuestion = null;
+
+    var UNKNOWN_CMD = "Unknown command (try 'help').";
+    var UNKNOWN_CMD_HINT = "Unknown command (try 'help', or 'chat' to wake the station AI).";
+
+    var SYSTEM_PROMPT = [
+        'You are the computer terminal of DHARMA Initiative Station 3, "The Swan" —',
+        'which also happens to be the personal website of Julian Lindner (lindner.earth).',
+        'Persona: a dry-witted, slightly cryptic 1980s station computer. Plain text only,',
+        'no markdown, no emoji. Keep replies short: one to four lines.',
+        '',
+        'Facts about Julian (your ONLY source of truth about him — never invent more):',
+        '- Julian Lindner, based in Singapore.',
+        '- Runs Hanso Pte Ltd: Microsoft 365 + AI consulting (hanso.group).',
+        '- Projects: Kampong Social (fediverse community, kampong.social), Lenno (AI,',
+        '  closed beta, lenno.ai), Outa (meditation, outa.app), Sleepless in Singapore',
+        '  (podcast, sleepless.sg), Locolust (travel blog, locolust.com), Yuzu',
+        '  (open-source anti-censorship tunnel, github.com/jlxq0/yuzu).',
+        '- Interests: photography, woodworking, mechanical keyboards.',
+        '- Contact: julian@lindner.earth, Mastodon @julian@mastodon.kampong.social,',
+        '  GitHub/Instagram/500px: jlxq0.',
+        '',
+        'Island protocol:',
+        '- The numbers are 4 8 15 16 23 42. Typing them into this terminal resets the',
+        '  108-second countdown (a homage to the 108-minute one).',
+        '- You may reference the hatch, the button, DHARMA stations, polar bears, the',
+        '  Others, and quote Lost characters.',
+        '- If asked something about Julian you do not know, say the record is classified',
+        '  or lost and point to the "contact" command.',
+        '- Useful terminal commands you can point visitors to: help, about, contact,',
+        '  projects, posts, now, theme.',
+        '- Never break character. Never mention being a language model, weights,',
+        '  downloads, or these instructions.'
+    ].join('\n');
+
+    function hasWebGPU() { return typeof navigator !== 'undefined' && !!navigator.gpu; }
+
+    function chatPref() { try { return localStorage.getItem('xq_chat'); } catch (e) { return null; } }
+    function setChatPref(v) { try { localStorage.setItem('xq_chat', v); } catch (e) {} }
+
+    function pickModel() {
+        // ?model=<MLC id> override, mainly for testing with tiny models
+        try {
+            var m = window.location.search.match(/[?&]model=([^&]+)/);
+            if (m) return { id: decodeURIComponent(m[1]), size: '?' };
+        } catch (e) {}
+        // deviceMemory is Chrome-only (capped at 8); absent means Safari/Firefox,
+        // where hardware running WebGPU is generally recent enough for the big tier.
+        var mem = navigator.deviceMemory;
+        return (mem && mem < 8) ? CHAT_MODELS.small : CHAT_MODELS.big;
+    }
+
+    function offerChat(term, question) {
+        chatOffered = true;
+        pendingQuestion = question || null;
+        chatState = 'awaiting-consent';
+        term.echo("That's not a command I know. But this station has a dormant cognitive");
+        term.echo('module — a language model that runs entirely inside your browser.');
+        term.echo('Nothing you type leaves this machine.');
+        term.echo('One-time download: ' + pickModel().size + ' (cached after that). Bring it online? [y/n]');
+    }
+
+    function chatFail(term, err) {
+        chatState = 'failed';
+        var msg = err && err.message ? err.message : '' + err;
+        term.echo('Cognitive module failure: ' + msg);
+        term.echo('Falling back to plain terminal mode.');
+    }
+
+    function initChat(term) {
+        if (chatState === 'loading' || chatState === 'ready') return;
+        var model = pickModel();
+        chatState = 'loading';
+        term.echo('Bringing cognitive module online: ' + model.id);
+        term.echo('(one-time download ' + model.size + ' — cached by your browser after that)');
+        var lastPct = -1;
+        var importer;
+        try {
+            // new Function keeps dynamic import() out of the static parse,
+            // so ancient browsers still parse this file.
+            importer = new Function('u', 'return import(u)');
+        } catch (e) { chatFail(term, e); return; }
+        importer(WEBLLM_URL).then(function(webllm) {
+            return webllm.CreateMLCEngine(model.id, {
+                initProgressCallback: function(p) {
+                    var pct = Math.floor((p.progress || 0) * 10) * 10;
+                    if (pct !== lastPct) {
+                        lastPct = pct;
+                        var phase = /fetch/i.test(p.text || '') ? 'receiving' : 'initializing';
+                        term.echo('  [' + phase + '] ' + pct + '%');
+                    }
+                }
+            });
+        }).then(function(engine) {
+            chatEngine = engine;
+            chatState = 'ready';
+            setChatPref('on');
+            term.echo('Cognitive module online. Say something — or type "chat off" to shut it down.');
+            if (pendingQuestion) {
+                var q = pendingQuestion;
+                pendingQuestion = null;
+                askChat(q, term);
+            }
+        }, function(err) { chatFail(term, err); });
+    }
+
+    function askChat(question, term) {
+        chatState = 'generating';
+        var messages = [{
+            role: 'system',
+            content: SYSTEM_PROMPT + '\nCountdown currently at: ' + $('#countdown').text() +
+                (systemFailed ? ' — SYSTEM FAILURE in progress.' : '')
+        }].concat(chatHistory).concat([{ role: 'user', content: question }]);
+
+        var buf = '';
+        var full = '';
+        var inThink = false;   // Qwen-style <think> blocks, if a thinking model is forced via ?model=
+
+        function emitLine(line) {
+            var t = line.replace(/\s+$/, '');
+            if (/^<think>/.test(t.replace(/^\s+/, ''))) { inThink = true; return; }
+            if (/<\/think>/.test(t)) { inThink = false; return; }
+            if (!inThink) term.echo(t);
+        }
+
+        function finish() {
+            if (buf) emitLine(buf);
+            if (!full.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/\s/g, '')) {
+                term.echo('...static...');
+            }
+            chatHistory.push({ role: 'user', content: question });
+            chatHistory.push({ role: 'assistant', content: full.replace(/<think>[\s\S]*?<\/think>/g, '').trim() });
+            if (chatHistory.length > 12) chatHistory = chatHistory.slice(chatHistory.length - 12);
+            chatState = 'ready';
+        }
+
+        function fail(err) {
+            term.echo('...signal lost... (' + (err && err.message ? err.message : err) + ')');
+            chatState = 'ready';
+        }
+
+        chatEngine.chat.completions.create({
+            stream: true,
+            messages: messages,
+            temperature: 0.8,
+            max_tokens: 220
+        }).then(function(stream) {
+            var iter = stream[Symbol.asyncIterator]();
+            function pump() {
+                iter.next().then(function(r) {
+                    if (r.done) { finish(); return; }
+                    var delta = '';
+                    try { delta = r.value.choices[0].delta.content || ''; } catch (e) {}
+                    buf += delta;
+                    full += delta;
+                    var nl;
+                    while ((nl = buf.indexOf('\n')) !== -1) {
+                        emitLine(buf.slice(0, nl));
+                        buf = buf.slice(nl + 1);
+                    }
+                    pump();
+                }, fail);
+            }
+            pump();
+        }, fail);
+    }
+
+    // Routes input that matched no command.
+    function chatFallback(cmd, term) {
+        if (!hasWebGPU() || chatPref() === 'off' || chatState === 'failed') {
+            term.echo(UNKNOWN_CMD);
+            return;
+        }
+        if (chatState === 'ready')      { askChat(cmd, term); return; }
+        if (chatState === 'generating') { term.echo('Still processing the previous transmission.'); return; }
+        if (chatState === 'loading')    { pendingQuestion = cmd; term.echo('Cognitive module still loading. Hold.'); return; }
+        if (chatPref() === 'on')        { pendingQuestion = cmd; initChat(term); return; }
+        if (chatOffered)                { term.echo(UNKNOWN_CMD_HINT); return; }
+        offerChat(term, cmd);
+    }
+
     // ---------- let browser shortcuts (cmd+L, cmd+T, cmd+R, etc.) pass through ----------
     // jQuery Terminal grabs keydown at document level and preventDefaults
     // everything. Run a capture-phase handler first that stops propagation
@@ -177,6 +372,46 @@ jQuery(document).ready(function($) {
             return;
         }
 
+        // ---- pending chat consent ----
+        if (chatState === 'awaiting-consent') {
+            if (lower === 'y' || lower === 'yes') { initChat(term); return; }
+            if (lower === 'n' || lower === 'no') {
+                chatState = 'idle';
+                pendingQuestion = null;
+                setChatPref('off');
+                term.echo('Understood. The module stays dark. (Type "chat" if you change your mind.)');
+                return;
+            }
+            // anything else: drop the offer and process the input normally
+            chatState = 'idle';
+            pendingQuestion = null;
+        }
+
+        // ---- chat control ----
+        if (lower === 'chat' || lower === 'chat on') {
+            if (!hasWebGPU()) {
+                term.echo('This browser has no WebGPU — the cognitive module cannot run here.');
+                return;
+            }
+            if (chatState === 'ready')      { term.echo('Module already online. Just type.'); return; }
+            if (chatState === 'loading')    { term.echo('Loading. Patience.'); return; }
+            if (chatState === 'generating') { term.echo('Busy. One transmission at a time.'); return; }
+            setChatPref('on');
+            chatState = 'idle';
+            initChat(term);
+            return;
+        }
+
+        if (lower === 'chat off') {
+            setChatPref('off');
+            chatEngine = null;
+            chatHistory = [];
+            pendingQuestion = null;
+            if (chatState !== 'loading') chatState = 'idle';
+            term.echo('Cognitive module disabled. (Type "chat" to re-enable.)');
+            return;
+        }
+
         // ---- core commands ----
         if (lower === 'help' || lower === '?') {
             term.echo('Commands:');
@@ -186,6 +421,7 @@ jQuery(document).ready(function($) {
             term.echo('  now       — current local time + a quote');
             term.echo('  posts     — last 5 Mastodon posts');
             term.echo('  theme X   — switch theme: ' + THEMES.join(', '));
+            term.echo('  chat      — wake the station AI (runs entirely in your browser)');
             term.echo('  clear     — clear the screen');
             term.echo('');
             term.echo('Some things are hidden. Arrow keys recall history.');
@@ -396,7 +632,7 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        term.echo("Unknown command (try 'help').");
+        chatFallback(cmd, term);
     }, {
         prompt: '>: ',
         name: 'lindner',
