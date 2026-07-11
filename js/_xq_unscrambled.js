@@ -330,6 +330,8 @@ jQuery(document).ready(function($) {
 
     function askChat(question, term) {
         chatState = 'generating';
+        // no prompt, no input until the answer has fully arrived
+        try { term.pause(); } catch (e) {}
         var state = '\n\nCURRENT STATE:\ncountdown: ' + $('#countdown').text() +
             (systemFailed ? '\nSYSTEM FAILURE: active — the visitor must type: 4 8 15 16 23 42' : '');
         // Qwen3 soft switch: suppress the thinking block
@@ -366,11 +368,13 @@ jQuery(document).ready(function($) {
             chatHistory.push({ role: 'assistant', content: full.replace(/<think>[\s\S]*?<\/think>/g, '').trim() });
             if (chatHistory.length > 12) chatHistory = chatHistory.slice(chatHistory.length - 12);
             chatState = 'ready';
+            try { term.resume(); } catch (e) {}
         }
 
         function fail(err) {
             term.echo('...signal lost... (' + (err && err.message ? err.message : err) + ')');
             chatState = 'ready';
+            try { term.resume(); } catch (e) {}
         }
 
         chatEngine.chat.completions.create({
