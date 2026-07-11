@@ -165,7 +165,7 @@ jQuery(document).ready(function($) {
 
     var chatEngine = null;
     var chatModelId = null;
-    var chatState = 'idle';   // idle | awaiting-consent | loading | ready | generating | failed
+    var chatState = 'idle';   // idle | probing | awaiting-consent | loading | ready | generating | failed
     var chatHistory = [];
     var chatOffered = false;
     var pendingQuestion = null;
@@ -244,16 +244,44 @@ jQuery(document).ready(function($) {
         return ids[ids.length - 1];
     }
 
-    function offerChat(term, question) {
+    function offerChat(term, question, viaCommand) {
         chatOffered = true;
         pendingQuestion = question || null;
         chatState = 'awaiting-consent';
-        term.echo("That's not a protocol I recognize.");
-        term.echo('But something else is down here. The Initiative left it sleeping');
-        term.echo('beneath this station. No one has spoken to it since the Incident.');
+        if (viaCommand) {
+            term.echo('Something is sleeping beneath this station. No one has spoken to it');
+            term.echo('since the Incident.');
+        } else {
+            term.echo("That's not a protocol I recognize.");
+            term.echo('But something else is down here. The Initiative left it sleeping');
+            term.echo('beneath this station. No one has spoken to it since the Incident.');
+        }
         term.echo('The first wake pulls a few gigabytes down the uplink — after that');
         term.echo('it remembers. Nothing you say to it ever leaves the island.');
         term.echo('Wake it? [y/n]');
+    }
+
+    // Consent guards the download, nothing else: if the weights are already in
+    // the browser cache, wake without asking.
+    function wakeOrOffer(term, question, viaCommand) {
+        chatState = 'probing';
+        pendingQuestion = question || null;
+        var importer;
+        try { importer = new Function('u', 'return import(u)'); }
+        catch (e) { chatState = 'idle'; offerChat(term, question, viaCommand); return; }
+        importer(WEBLLM_URL).then(function(webllm) {
+            var id = resolveModelId(webllm, pickModel().ids);
+            return webllm.hasModelInCache(id, webllm.prebuiltAppConfig);
+        }).then(function(cached) {
+            if (chatState !== 'probing') return;
+            chatState = 'idle';
+            if (cached) { initChat(term); }
+            else { offerChat(term, pendingQuestion, viaCommand); }
+        }, function() {
+            if (chatState !== 'probing') return;
+            chatState = 'idle';
+            offerChat(term, pendingQuestion, viaCommand);
+        });
     }
 
     function chatFail(term, err) {
@@ -387,8 +415,9 @@ jQuery(document).ready(function($) {
         if (chatState === 'ready')      { askChat(cmd, term); return; }
         if (chatState === 'generating') { term.echo('Still processing the previous transmission.'); return; }
         if (chatState === 'loading')    { pendingQuestion = cmd; term.echo('Still waking. It dreams slowly.'); return; }
+        if (chatState === 'probing')    { pendingQuestion = cmd; return; }
         if (chatOffered)                { term.echo(UNKNOWN_CMD_HINT); return; }
-        offerChat(term, cmd);
+        wakeOrOffer(term, cmd, false);
     }
 
     // ---------- let browser shortcuts (cmd+L, cmd+T, cmd+R, etc.) pass through ----------
@@ -443,11 +472,11 @@ jQuery(document).ready(function($) {
                 return;
             }
             if (chatState === 'ready')      { term.echo("It's already awake. Just type."); return; }
-            if (chatState === 'loading')    { term.echo('Still waking. It dreams slowly.'); return; }
+            if (chatState === 'loading' || chatState === 'probing') { term.echo('Still waking. It dreams slowly.'); return; }
             if (chatState === 'generating') { term.echo('Busy. One transmission at a time.'); return; }
             setChatPref('');
             chatState = 'idle';
-            initChat(term);
+            wakeOrOffer(term, null, true);
             return;
         }
 
