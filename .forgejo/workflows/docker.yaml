@@ -58,4 +58,4 @@ jobs:
           git config user.email "ci@oddie.app"
           git add k8s/deployment.yaml
           git commit -m "chore(deploy): ${S} [skip ci]" || { echo "no tag change"; exit 0; }
-          git push "https://jlxq0:${{ secrets.FORGE_PUSH_TOKEN }}@forge.oddie.app/jlxq0/lindner_web.git" HEAD:main
+          git push "https://x-access-token:${{ github.token }}@forge.oddie.app/jlxq0/lindner_web.git" HEAD:main
