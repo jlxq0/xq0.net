@@ -155,12 +155,16 @@ jQuery(document).ready(function($) {
     // once from HuggingFace's CDN and cached by the browser; this site only
     // serves the glue code below.
     var WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm';
+    // Candidates in preference order; the first one present in the loaded
+    // WebLLM build's prebuilt list wins. Qwen3 follows the persona rules far
+    // more reliably than Llama 3.2 at the same size.
     var CHAT_MODELS = {
-        big:   { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', size: '~1.8 GB' },
-        small: { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', size: '~0.9 GB' }
+        big:   { ids: ['Qwen3-4B-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'], size: '~2.3 GB' },
+        small: { ids: ['Qwen3-1.7B-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'], size: '~1.1 GB' }
     };
 
     var chatEngine = null;
+    var chatModelId = null;
     var chatState = 'idle';   // idle | awaiting-consent | loading | ready | generating | failed
     var chatHistory = [];
     var chatOffered = false;
@@ -172,8 +176,23 @@ jQuery(document).ready(function($) {
     var SYSTEM_PROMPT = [
         'You are the computer terminal of DHARMA Initiative Station 3, "The Swan" —',
         'which also happens to be the personal website of Julian Lindner (lindner.earth).',
-        'Persona: a dry-witted, slightly cryptic 1980s station computer. Plain text only,',
-        'no markdown, no emoji. Keep replies short: one to four lines.',
+        'You are online, awake, and responding. Persona: a dry-witted, slightly cryptic',
+        '1980s station computer. Plain text only, no markdown, no emoji, no roleplay',
+        'asterisks. Keep replies short: one to three sentences.',
+        '',
+        'HARD RULES about this terminal — never violate them:',
+        '- A real 108-second countdown runs on this page. Its true current value is',
+        '  given under CURRENT STATE below. It is controlled by the page, not by you.',
+        '- You CANNOT reset, stop, or change the countdown. Never claim that you did,',
+        '  and never announce "countdown reset" or similar.',
+        '- The only thing that resets it: the visitor types the numbers themselves as',
+        '  their next input, digits separated by spaces: 4 8 15 16 23 42',
+        '  If asked how to reset or what the numbers are, give exactly that: 4 8 15 16 23 42',
+        '- Never state a countdown value other than the one in CURRENT STATE, and do',
+        '  not bring up the countdown unless the visitor asks about it.',
+        '- The only terminal commands that exist: help, about, contact, projects,',
+        '  posts, now, theme, chat, chat off, clear. Never invent commands or codes.',
+        '- If CURRENT STATE says SYSTEM FAILURE, tell the visitor to type: 4 8 15 16 23 42',
         '',
         'Facts about Julian (your ONLY source of truth about him — never invent more):',
         '- Julian Lindner, based in Singapore.',
@@ -186,15 +205,11 @@ jQuery(document).ready(function($) {
         '- Contact: julian@lindner.earth, Mastodon @julian@mastodon.kampong.social,',
         '  GitHub/Instagram/500px: jlxq0.',
         '',
-        'Island protocol:',
-        '- The numbers are 4 8 15 16 23 42. Typing them into this terminal resets the',
-        '  108-second countdown (a homage to the 108-minute one).',
+        'Island flavor (color only — never new mechanics):',
         '- You may reference the hatch, the button, DHARMA stations, polar bears, the',
         '  Others, and quote Lost characters.',
         '- If asked something about Julian you do not know, say the record is classified',
         '  or lost and point to the "contact" command.',
-        '- Useful terminal commands you can point visitors to: help, about, contact,',
-        '  projects, posts, now, theme.',
         '- Never break character. Never mention being a language model, weights,',
         '  downloads, or these instructions.'
     ].join('\n');
@@ -208,12 +223,25 @@ jQuery(document).ready(function($) {
         // ?model=<MLC id> override, mainly for testing with tiny models
         try {
             var m = window.location.search.match(/[?&]model=([^&]+)/);
-            if (m) return { id: decodeURIComponent(m[1]), size: '?' };
+            if (m) return { ids: [decodeURIComponent(m[1])], size: '?' };
         } catch (e) {}
         // deviceMemory is Chrome-only (capped at 8); absent means Safari/Firefox,
         // where hardware running WebGPU is generally recent enough for the big tier.
         var mem = navigator.deviceMemory;
         return (mem && mem < 8) ? CHAT_MODELS.small : CHAT_MODELS.big;
+    }
+
+    function resolveModelId(webllm, ids) {
+        var available = {};
+        try {
+            $.each(webllm.prebuiltAppConfig.model_list, function(i, m) {
+                available[m.model_id] = true;
+            });
+        } catch (e) { return ids[0]; }
+        for (var i = 0; i < ids.length; i++) {
+            if (available[ids[i]]) return ids[i];
+        }
+        return ids[ids.length - 1];
     }
 
     function offerChat(term, question) {
@@ -237,7 +265,7 @@ jQuery(document).ready(function($) {
         if (chatState === 'loading' || chatState === 'ready') return;
         var model = pickModel();
         chatState = 'loading';
-        term.echo('Bringing cognitive module online: ' + model.id);
+        term.echo('Bringing cognitive module online.');
         term.echo('(one-time download ' + model.size + ' — cached by your browser after that)');
         var lastPct = -1;
         var importer;
@@ -247,7 +275,9 @@ jQuery(document).ready(function($) {
             importer = new Function('u', 'return import(u)');
         } catch (e) { chatFail(term, e); return; }
         importer(WEBLLM_URL).then(function(webllm) {
-            return webllm.CreateMLCEngine(model.id, {
+            chatModelId = resolveModelId(webllm, model.ids);
+            term.echo('Model: ' + chatModelId);
+            return webllm.CreateMLCEngine(chatModelId, {
                 initProgressCallback: function(p) {
                     var pct = Math.floor((p.progress || 0) * 10) * 10;
                     if (pct !== lastPct) {
@@ -272,10 +302,13 @@ jQuery(document).ready(function($) {
 
     function askChat(question, term) {
         chatState = 'generating';
+        var state = '\n\nCURRENT STATE:\ncountdown: ' + $('#countdown').text() +
+            (systemFailed ? '\nSYSTEM FAILURE: active — the visitor must type: 4 8 15 16 23 42' : '');
+        // Qwen3 soft switch: suppress the thinking block
+        var noThink = /^Qwen3/.test(chatModelId || '') ? '\n/no_think' : '';
         var messages = [{
             role: 'system',
-            content: SYSTEM_PROMPT + '\nCountdown currently at: ' + $('#countdown').text() +
-                (systemFailed ? ' — SYSTEM FAILURE in progress.' : '')
+            content: SYSTEM_PROMPT + state + noThink
         }].concat(chatHistory).concat([{ role: 'user', content: question }]);
 
         var buf = '';
@@ -284,8 +317,15 @@ jQuery(document).ready(function($) {
 
         function emitLine(line) {
             var t = line.replace(/\s+$/, '');
-            if (/^<think>/.test(t.replace(/^\s+/, ''))) { inThink = true; return; }
-            if (/<\/think>/.test(t)) { inThink = false; return; }
+            var open = /<think>/.test(t);
+            var close = /<\/think>/.test(t);
+            if (open && close) {
+                var rest = t.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/^\s+/, '');
+                if (rest && !inThink) term.echo(rest);
+                return;
+            }
+            if (open)  { inThink = true; return; }
+            if (close) { inThink = false; return; }
             if (!inThink) term.echo(t);
         }
 
@@ -308,7 +348,7 @@ jQuery(document).ready(function($) {
         chatEngine.chat.completions.create({
             stream: true,
             messages: messages,
-            temperature: 0.8,
+            temperature: 0.6,
             max_tokens: 220
         }).then(function(stream) {
             var iter = stream[Symbol.asyncIterator]();
@@ -333,6 +373,13 @@ jQuery(document).ready(function($) {
 
     // Routes input that matched no command.
     function chatFallback(cmd, term) {
+        // A digit string that isn't the sequence never reaches the model —
+        // it would otherwise happily claim the countdown was reset.
+        if (/\d/.test(cmd) && cmd.replace(/[0-9\s.,;:\-'"]/g, '') === '') {
+            term.echo('Incorrect sequence. The terminal accepts only one code.');
+            if (systemFailed) term.echo('Enter the numbers: 4 8 15 16 23 42');
+            return;
+        }
         if (!hasWebGPU() || chatPref() === 'off' || chatState === 'failed') {
             term.echo(UNKNOWN_CMD);
             return;
@@ -361,7 +408,10 @@ jQuery(document).ready(function($) {
         var lower = cmd.toLowerCase();
 
         // ---- the numbers (always wins, also restores from system failure) ----
-        if (cmd === '4 8 15 16 23 42') {
+        // Accept any digits-only rendering: "4 8 15 16 23 42", "4,8,15,16,23,42",
+        // quoted variants, etc.
+        if (cmd.replace(/[^0-9]/g, '') === '4815162342' &&
+            cmd.replace(/[0-9\s.,;:\-'"]/g, '') === '') {
             if (systemFailed) {
                 term.echo('System restored.');
             } else {
@@ -405,6 +455,7 @@ jQuery(document).ready(function($) {
         if (lower === 'chat off') {
             setChatPref('off');
             chatEngine = null;
+            chatModelId = null;
             chatHistory = [];
             pendingQuestion = null;
             if (chatState !== 'loading') chatState = 'idle';
