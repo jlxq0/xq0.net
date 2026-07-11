@@ -1,0 +1,21 @@
+# Own LB VIP (::101) — BGP-announced from the cluster; the edge Caddy
+# reverse_proxies www.lindner.earth to [::101]:80 over the tunnel. Distinct
+# from static-sites (::100) so lindner_web is a fully self-contained app.
+apiVersion: v1
+kind: Service
+metadata:
+  name: lindner-web
+  namespace: web
+  labels:
+    app: lindner-web
+    bgp-announce: "yes"        # selected by the fondue CiliumBGPAdvertisement
+  annotations:
+    lbipam.cilium.io/ips: "2001:df7:2b40:1::101"
+spec:
+  type: LoadBalancer
+  ipFamilyPolicy: SingleStack
+  ipFamilies: [IPv6]
+  selector:
+    app: lindner-web
+  ports:
+    - { name: http, port: 80, targetPort: 8080, protocol: TCP }

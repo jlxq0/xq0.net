@@ -1,0 +1,61 @@
+name: docker
+# Build the site image AND self-bump the k8s deploy tag → push-to-deploy:
+# push content → CI builds forge.oddie.app/jlxq0/lindner_web:<sha> → CI commits
+# the tag into k8s/deployment.yaml → ArgoCD (auto-sync) rolls it out. Same
+# buildctl-on-the-runner-host pattern as oddie-apps/static-sites.
+on:
+  push:
+    branches: [main]
+    paths-ignore: [k8s/**]      # the self-bump commit only touches k8s/ → don't loop
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: jlxq0/lindner_web
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions: { contents: write, packages: write }
+    container:
+      image: forge.oddie.app/jlxq0/ci-elixir:1.19.5-otp-28
+      credentials:
+        username: ${{ secrets.FORGE_REGISTRY_USER }}
+        password: ${{ secrets.FORGE_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+
+      - name: Log in to forge.oddie.app registry
+        run: |
+          mkdir -p ~/.docker
+          F_AUTH=$(printf "%s:%s" "${{ secrets.FORGE_REGISTRY_USER }}" "${{ secrets.FORGE_REGISTRY_TOKEN }}" | base64 -w0)
+          echo "{\"auths\":{\"forge.oddie.app\":{\"auth\":\"$F_AUTH\"}}}" > ~/.docker/config.json
+
+      - name: Build and push (linux/amd64)
+        run: |
+          GW="$(ip -4 route 2>/dev/null | awk '/^default/{print $3; exit}')"
+          if [ -z "$GW" ]; then
+            h=$(awk '$2=="00000000"{print $3; exit}' /proc/net/route)
+            GW=$(printf '%d.%d.%d.%d' "0x${h:6:2}" "0x${h:4:2}" "0x${h:2:2}" "0x${h:0:2}")
+          fi
+          export BUILDKIT_HOST="tcp://${GW}:1234"
+          S="$(echo "${{ github.sha }}" | cut -c1-7)"
+          CACHE_REF="forge.oddie.app/${IMAGE_NAME}:cache"
+          buildctl build \
+            --frontend dockerfile.v0 \
+            --local context=. \
+            --local dockerfile=. \
+            --opt platform=linux/amd64 \
+            --import-cache "type=registry,ref=${CACHE_REF}" \
+            --export-cache "type=registry,ref=${CACHE_REF},mode=max,ignore-error=true" \
+            --output "type=image,\"name=forge.oddie.app/${IMAGE_NAME}:latest,forge.oddie.app/${IMAGE_NAME}:${S}\",push=true"
+
+      - name: Bump deploy tag → ArgoCD rolls it out
+        run: |
+          S="$(echo "${{ github.sha }}" | cut -c1-7)"
+          sed -i "s#image: forge.oddie.app/jlxq0/lindner_web:.*#image: forge.oddie.app/jlxq0/lindner_web:${S}#" k8s/deployment.yaml
+          git config user.name  "jlxq0-ci"
+          git config user.email "ci@oddie.app"
+          git add k8s/deployment.yaml
+          git commit -m "chore(deploy): ${S} [skip ci]" || { echo "no tag change"; exit 0; }
+          git push "https://jlxq0:${{ secrets.FORGE_PUSH_TOKEN }}@forge.oddie.app/jlxq0/lindner_web.git" HEAD:main

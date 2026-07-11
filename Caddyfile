@@ -1,0 +1,24 @@
+# In-cluster origin for www.lindner.earth. TLS terminates at the edge (Vultr/iFog
+# Caddy + Souin); this serves plain HTTP on :8080 as non-root. Single site, so no
+# Host matching. NO encode here — the origin serves one identity body and the edge
+# compresses per-client (compressing here would poison the edge cache with Vary).
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	# k8s probes hit the pod IP (not a Host) — answer them first
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	handle {
+		root * /srv
+		# unfingerprinted assets → modest TTL so edits propagate (edge caches 300s)
+		header Cache-Control "public, max-age=300"
+		header X-Content-Type-Options nosniff
+		file_server
+	}
+}
