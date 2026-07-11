@@ -171,7 +171,7 @@ jQuery(document).ready(function($) {
     var pendingQuestion = null;
 
     var UNKNOWN_CMD = "Unknown command (try 'help').";
-    var UNKNOWN_CMD_HINT = "Unknown command (try 'help', or 'chat' to wake the station AI).";
+    var UNKNOWN_CMD_HINT = "Unknown command (try 'help', or 'chat' to wake what sleeps below).";
 
     var SYSTEM_PROMPT = [
         'You are the computer terminal of DHARMA Initiative Station 3, "The Swan" —',
@@ -248,25 +248,26 @@ jQuery(document).ready(function($) {
         chatOffered = true;
         pendingQuestion = question || null;
         chatState = 'awaiting-consent';
-        term.echo("That's not a command I know. But this station has a dormant cognitive");
-        term.echo('module — a language model that runs entirely inside your browser.');
-        term.echo('Nothing you type leaves this machine.');
-        term.echo('One-time download: ' + pickModel().size + ' (cached after that). Bring it online? [y/n]');
+        term.echo("That's not a protocol I recognize.");
+        term.echo('But something else is down here. The Initiative left it sleeping');
+        term.echo('beneath this station. No one has spoken to it since the Incident.');
+        term.echo('The first wake pulls a few gigabytes down the uplink — after that');
+        term.echo('it remembers. Nothing you say to it ever leaves the island.');
+        term.echo('Wake it? [y/n]');
     }
 
     function chatFail(term, err) {
         chatState = 'failed';
         var msg = err && err.message ? err.message : '' + err;
-        term.echo('Cognitive module failure: ' + msg);
-        term.echo('Falling back to plain terminal mode.');
+        term.echo('Wake sequence failed: ' + msg);
+        term.echo('It sleeps on. The station returns to manual operation.');
     }
 
     function initChat(term) {
         if (chatState === 'loading' || chatState === 'ready') return;
         var model = pickModel();
         chatState = 'loading';
-        term.echo('Bringing cognitive module online.');
-        term.echo('(one-time download ' + model.size + ' — cached by your browser after that)');
+        term.echo('Beginning wake sequence. Do not leave the hatch.');
         var lastPct = -1;
         var importer;
         try {
@@ -276,13 +277,13 @@ jQuery(document).ready(function($) {
         } catch (e) { chatFail(term, e); return; }
         importer(WEBLLM_URL).then(function(webllm) {
             chatModelId = resolveModelId(webllm, model.ids);
-            term.echo('Model: ' + chatModelId);
+            try { console.log('[swan] model: ' + chatModelId); } catch (e) {}
             return webllm.CreateMLCEngine(chatModelId, {
                 initProgressCallback: function(p) {
                     var pct = Math.floor((p.progress || 0) * 10) * 10;
                     if (pct !== lastPct) {
                         lastPct = pct;
-                        var phase = /fetch/i.test(p.text || '') ? 'receiving' : 'initializing';
+                        var phase = /fetch/i.test(p.text || '') ? 'uplink' : 'waking';
                         term.echo('  [' + phase + '] ' + pct + '%');
                     }
                 }
@@ -290,8 +291,7 @@ jQuery(document).ready(function($) {
         }).then(function(engine) {
             chatEngine = engine;
             chatState = 'ready';
-            setChatPref('on');
-            term.echo('Cognitive module online. Say something — or type "chat off" to shut it down.');
+            term.echo("It's awake. Say something. (\"chat off\" puts it back under.)");
             if (pendingQuestion) {
                 var q = pendingQuestion;
                 pendingQuestion = null;
@@ -386,8 +386,7 @@ jQuery(document).ready(function($) {
         }
         if (chatState === 'ready')      { askChat(cmd, term); return; }
         if (chatState === 'generating') { term.echo('Still processing the previous transmission.'); return; }
-        if (chatState === 'loading')    { pendingQuestion = cmd; term.echo('Cognitive module still loading. Hold.'); return; }
-        if (chatPref() === 'on')        { pendingQuestion = cmd; initChat(term); return; }
+        if (chatState === 'loading')    { pendingQuestion = cmd; term.echo('Still waking. It dreams slowly.'); return; }
         if (chatOffered)                { term.echo(UNKNOWN_CMD_HINT); return; }
         offerChat(term, cmd);
     }
@@ -428,8 +427,7 @@ jQuery(document).ready(function($) {
             if (lower === 'n' || lower === 'no') {
                 chatState = 'idle';
                 pendingQuestion = null;
-                setChatPref('off');
-                term.echo('Understood. The module stays dark. (Type "chat" if you change your mind.)');
+                term.echo('Probably wise. It stays under. (Type "chat" if curiosity wins.)');
                 return;
             }
             // anything else: drop the offer and process the input normally
@@ -440,13 +438,14 @@ jQuery(document).ready(function($) {
         // ---- chat control ----
         if (lower === 'chat' || lower === 'chat on') {
             if (!hasWebGPU()) {
-                term.echo('This browser has no WebGPU — the cognitive module cannot run here.');
+                term.echo('The uplink to what sleeps below cannot be established from this');
+                term.echo('browser. (It needs WebGPU.)');
                 return;
             }
-            if (chatState === 'ready')      { term.echo('Module already online. Just type.'); return; }
-            if (chatState === 'loading')    { term.echo('Loading. Patience.'); return; }
+            if (chatState === 'ready')      { term.echo("It's already awake. Just type."); return; }
+            if (chatState === 'loading')    { term.echo('Still waking. It dreams slowly.'); return; }
             if (chatState === 'generating') { term.echo('Busy. One transmission at a time.'); return; }
-            setChatPref('on');
+            setChatPref('');
             chatState = 'idle';
             initChat(term);
             return;
@@ -459,7 +458,7 @@ jQuery(document).ready(function($) {
             chatHistory = [];
             pendingQuestion = null;
             if (chatState !== 'loading') chatState = 'idle';
-            term.echo('Cognitive module disabled. (Type "chat" to re-enable.)');
+            term.echo('It goes back under. (Type "chat" to wake it again.)');
             return;
         }
 
@@ -472,7 +471,7 @@ jQuery(document).ready(function($) {
             term.echo('  now       — current local time + a quote');
             term.echo('  posts     — last 5 Mastodon posts');
             term.echo('  theme X   — switch theme: ' + THEMES.join(', '));
-            term.echo('  chat      — wake the station AI (runs entirely in your browser)');
+            term.echo('  chat      — wake what sleeps beneath the station');
             term.echo('  clear     — clear the screen');
             term.echo('');
             term.echo('Some things are hidden. Arrow keys recall history.');
