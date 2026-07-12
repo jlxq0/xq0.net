@@ -13,9 +13,12 @@ const applicationSource = readSource();
 const requiredRuntimeFiles = [
   "CNAME",
   "Caddyfile",
+  "apple-touch-icon.png",
   "css/crt.css",
   "css/jquery.terminal.css",
   "favicon.svg",
+  "favicon-32.png",
+  "favicon.ico",
   "index.html",
   "js/jquery-1.7.1.min.js",
   "js/jquery.terminal-min.js",
@@ -58,8 +61,14 @@ test("all runtime and discovery files exist", () => {
 
 test("the favicon uses the supplied bird artwork", () => {
   const favicon = readFileSync(resolve(root, "favicon.svg"), "utf8");
-  assert.match(favicon, /viewBox="0 0 1042 878"/);
+  const html = readFileSync(resolve(root, "index.html"), "utf8");
+  const manifest = readFileSync(resolve(root, "site.webmanifest"), "utf8");
+  assert.match(favicon, /viewBox="0 0 1042 1042"/);
   assert.match(favicon, /M251 34q-36 5-66 25/);
+  assert.match(favicon, /transform="translate\(83 152\) scale\(\.84\)"/);
+  assert.match(html, /favicon-32\.png/);
+  assert.match(html, /apple-touch-icon\.png/);
+  assert.match(manifest, /favicon-32\.png/);
 });
 
 test("all runtime JavaScript parses", () => {
