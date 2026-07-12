@@ -56,19 +56,19 @@
 .terminal .terminal-output div div::-moz-selection,
 .terminal .terminal-output div span::-moz-selection,
 .terminal .terminal-output div div a::-moz-selection {
-    background-color: var(--crt-fg, #64cb28);
-    color: var(--crt-bg, #000);
+    background-color: #aaa;
+    color: #000;
 }
 .terminal .terminal-output div div::selection,
 .terminal .terminal-output div div a::selection,
 .terminal .terminal-output div span::selection,
 .terminal .cmd > span::selection,
 .terminal .prompt span::selection {
-    background-color: var(--crt-fg, #64cb28);
-    color: var(--crt-bg, #000);
+    background-color: #aaa;
+    color: #000;
 }
 .terminal .terminal-output div.error, .terminal .terminal-output div.error div {
-    color: #ff6874;
+    color: red;
 }
 .tilda {
     position: fixed;
@@ -81,15 +81,16 @@
     clear: both;
 }
 .terminal a {
-  color: var(--crt-link, #9edfff);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--crt-link, #9edfff) 58%, transparent);
-  text-underline-offset: 0.2em;
-  text-shadow: 0 0 5px var(--crt-glow, rgba(0, 126, 223, 0.35));
+  text-decoration: none;
+  color: #007edf;
+  text-shadow: none;
+
+  transition: color 0.5s ease;
+  transition: text-shadow 0.5s ease;
 }
 .terminal a:hover {
-  color: var(--crt-fg, #64cb28);
-  text-decoration-color: currentColor;
+  color: #0069ba;
+  text-shadow: #0090ff 0px 0px 2px;
 }
 .terminal a:focus-visible {
   outline: 2px solid var(--crt-link, #9edfff);

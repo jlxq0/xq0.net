@@ -106,6 +106,17 @@ test("the terminal is not hidden behind a boot screen", () => {
   assert.doesNotMatch(css, /boot-sequence|boot-release|boot-line/);
 });
 
+test("the interactive terminal keeps the original CRT visual treatment", () => {
+  const css = readFileSync(resolve(root, "css/crt.css"), "utf8");
+  const terminalCss = readFileSync(resolve(root, "css/jquery.terminal.css"), "utf8");
+
+  assert.match(css, /--crt-fg: #33ff66/);
+  assert.match(css, /font-family: 'Menlo', 'Monaco', 'Courier New', monospace/);
+  assert.match(css, /#term\.terminal[\s\S]*padding: 24px/);
+  assert.match(terminalCss, /color: #007edf/);
+  assert.doesNotMatch(css, /dossier-header h1|radial-gradient\(circle at 50% -20%/);
+});
+
 test("live announcements are scoped to output rather than the command editor", () => {
   const html = readFileSync(resolve(root, "index.html"), "utf8");
   const termTag = html.match(/<main id="term"[^>]*>/);
