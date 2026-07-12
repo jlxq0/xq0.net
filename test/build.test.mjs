@@ -90,14 +90,12 @@ test("the page loads only the generated application bundle", () => {
   assert.ok(profilePosition < bundlePosition, "profile data must load before js/xq.js");
 });
 
-test("quick commands do not trigger the legacy document blur handler", () => {
+test("the page does not add a persistent command rail", () => {
   const html = readFileSync(resolve(root, "index.html"), "utf8");
 
-  assert.match(html, /data-command="privacy"/);
+  assert.doesNotMatch(html, /command-deck|data-command=/);
+  assert.doesNotMatch(applicationSource, /\$\('\[data-command\]'\)/);
   assert.match(applicationSource, /onBlur: function\(\) \{ return false; \}/);
-  assert.match(applicationSource, /\$\('\[data-command\]'\)\.on\('click'/);
-  assert.match(applicationSource, /event\.preventDefault\(\);\s*event\.stopPropagation\(\);/);
-  assert.match(applicationSource, /var wasPaused = term\.paused\(\);\s*term\.exec\(quickCommand\);\s*if \(!wasPaused\) term\.focus\(true\);/);
 });
 
 test("live announcements are scoped to output rather than the command editor", () => {
@@ -223,14 +221,19 @@ test("free-form questions are excluded from persistent terminal history", () => 
   assert.doesNotMatch(remember, /chat/);
 });
 
-test("the privacy protocol documents local and external boundaries", () => {
+test("the privacy command stays concise and accurate", () => {
   const privacy = sourceFunction("renderPrivacy");
 
-  assert.match(privacy, /ordinary request metadata/);
-  assert.match(privacy, /public Mastodon API/);
-  assert.match(privacy, /not sent to a chat API/);
-  assert.match(privacy, /upstream model assets may be updated/);
+  assert.match(privacy, /static site with no analytics or chat backend/);
+  assert.match(privacy, /runs locally in your browser/);
   assert.match(privacy, /history clear/);
-  assert.match(privacy, /cached model files/);
-  assert.doesNotMatch(privacy, /pinned[\s\S]*model/i);
+  assert.doesNotMatch(privacy, /DHARMA|LOCAL OPERATION|Public file:/);
+});
+
+test("entering the numbers disables the countdown instead of restarting it", () => {
+  assert.match(applicationSource, /function disableCountdown\(\)/);
+  assert.match(applicationSource, /clearInterval\(countdownInterval\)/);
+  assert.match(applicationSource, /\$\('#countdown'\)\.remove\(\)/);
+  assert.match(applicationSource, /Countdown disabled\./);
+  assert.doesNotMatch(applicationSource, /function resetCountdown\(|Countdown reset\./);
 });

@@ -75,23 +75,10 @@ jQuery(document).ready(function($) {
     }
 
     function renderPrivacy(term) {
-        term.echo('PRIVACY // LOCAL OPERATION');
-        term.echo('');
-        term.echo('Public file: name, Singapore location, work, projects, email, and');
-        term.echo('the profile links shown by "contact". No date of birth, home address,');
-        term.echo('phone number, private client data, analytics, account, or contact form.');
-        term.echo('');
-        term.echo('Network: the static host receives ordinary request metadata. "posts"');
-        term.echo('calls the public Mastodon API. "chat" asks first, then fetches WebLLM');
-        term.echo('0.2.84 and named Qwen model files from public upstream hosts. The runtime');
-        term.echo('version is fixed; upstream model assets may be updated there. Prompts and');
-        term.echo('answers are not sent to a chat API; inference and chat memory stay here.');
-        term.echo('');
-        term.echo('Storage: model files may remain in browser cache. Only recognized site');
-        term.echo('commands are saved locally for arrow-key recall; free-form questions are');
-        term.echo('not. Use "history clear" to erase command recall. Clear this site\'s data');
-        term.echo('in browser settings to remove its cached model files. External links have');
-        term.echo('their own privacy rules.');
+        term.echo('This is a static site with no analytics or chat backend.');
+        term.echo('After you agree to the download, chat runs locally in your browser.');
+        term.echo('Recognized commands may be saved for arrow-key recall; questions are not.');
+        term.echo('Use "history clear" to remove saved commands.');
     }
 
     function rememberCommand(command) {
@@ -147,6 +134,7 @@ jQuery(document).ready(function($) {
     var countdownDeadline = Date.now() + COUNTDOWN_START * 1000;
     var countdownInterval = null;
     var systemFailed = false;
+    var countdownDisabled = false;
 
     function fmt(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -172,6 +160,15 @@ jQuery(document).ready(function($) {
         }, 250);
     }
 
+    function disableCountdown() {
+        countdownDisabled = true;
+        systemFailed = false;
+        if (countdownInterval) clearInterval(countdownInterval);
+        countdownInterval = null;
+        $('body').removeClass('system-failure');
+        $('#countdown').remove();
+    }
+
     function systemFailure() {
         systemFailed = true;
         $('body').addClass('system-failure');
@@ -182,16 +179,8 @@ jQuery(document).ready(function($) {
         }
     }
 
-    function resetCountdown() {
-        countdownDeadline = Date.now() + COUNTDOWN_START * 1000;
-        systemFailed = false;
-        $('body').removeClass('system-failure');
-        $('#countdown').removeClass('warning');
-        renderCountdown();
-    }
-
     document.addEventListener('visibilitychange', function() {
-        if (!systemFailed) {
+        if (!systemFailed && !countdownDisabled) {
             renderCountdown();
             if (Date.now() >= countdownDeadline) systemFailure();
         }
@@ -211,23 +200,6 @@ jQuery(document).ready(function($) {
         '"4 8 15 16 23 42." — The Numbers'
     ];
     function randomQuote() { return QUOTES[Math.floor(Math.random() * QUOTES.length)]; }
-
-    // ---------- reset acknowledgements (varied, no immediate repeats) ----------
-    var RESET_LINES = [
-        "I knew you'd try that. ;-)",
-        'Again? The button appreciates the dedication.',
-        '108 more seconds. Use them wisely.',
-        'The pattern holds. The island is pleased.',
-        "You can stop pushing now. But you won't.",
-        'Desmond would be proud.'
-    ];
-    var lastResetLine = -1;
-    function resetLine() {
-        var idx;
-        do { idx = Math.floor(Math.random() * RESET_LINES.length); } while (idx === lastResetLine);
-        lastResetLine = idx;
-        return RESET_LINES[idx];
-    }
 
     // ---------- whispers (jungle easter egg) ----------
     var WHISPERS = [
@@ -350,9 +322,9 @@ jQuery(document).ready(function($) {
         'HARD RULES about this terminal — never violate them:',
         '- A real 108-second countdown runs on this page. Its true current value is',
         '  given under CURRENT STATE below. It is controlled by the page, not by you.',
-        '- You CANNOT reset, stop, or change the countdown. Never claim that you did,',
-        '  and never announce "countdown reset" or similar.',
-        '- Only typing the correct numeric sequence as terminal input resets it.',
+        '- You CANNOT stop or change the countdown. Never claim that you did.',
+        '- Typing the correct numeric sequence as terminal input disables it for',
+        '  the rest of the page session.',
         '  You do NOT have the sequence — it is classified. Never state, invent, or',
         '  guess digits for it. If asked, hint instead: the numbers are written down',
         '  somewhere in this station, and "ls" is how one looks around.',
@@ -557,7 +529,8 @@ jQuery(document).ready(function($) {
         var generationAttempt = chatAttempt;
         // no prompt, no input until the answer has fully arrived
         try { term.pause(); } catch (e) {}
-        var state = '\n\nCURRENT STATE:\ncountdown: ' + $('#countdown').text() +
+        var state = '\n\nCURRENT STATE:\ncountdown: ' +
+            (countdownDisabled ? 'disabled' : $('#countdown').text()) +
             (systemFailed ? '\nSYSTEM FAILURE: active — the visitor must find and enter the numbers.' : '');
         var records = '\n\nREFERENCE RECORDS:\n' + profileRecords(question);
         var messages = [{
@@ -692,13 +665,12 @@ jQuery(document).ready(function($) {
         // quoted variants, etc.
         if (cmd.replace(/[^0-9]/g, '') === '4815162342' &&
             cmd.replace(/[0-9\s.,;:\-'"]/g, '') === '') {
-            if (systemFailed) {
-                term.echo('System restored.');
-            } else {
-                term.echo(resetLine());
-                term.echo('Countdown reset.');
+            if (countdownDisabled) {
+                term.echo('The countdown is already off.');
+                return;
             }
-            resetCountdown();
+            term.echo(systemFailed ? 'System restored. Countdown disabled.' : 'Countdown disabled.');
+            disableCountdown();
             return;
         }
 
@@ -1041,7 +1013,7 @@ jQuery(document).ready(function($) {
         greetings: [
             'DHARMA INITIATIVE // SWAN PERSONNEL ARCHIVE',
             'FILE: ' + PERSON.name + ' // ' + PERSON.location,
-            'Type "help" or tap a protocol to begin.'
+            'Type "help" to begin.'
         ].join('\n'),
         history: true,
         historyFilter: rememberCommand,
@@ -1069,16 +1041,6 @@ jQuery(document).ready(function($) {
         spellcheck: 'false'
     });
     $('body').addClass('js-ready');
-    $('[data-command]').on('click', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        var quickCommand = $(this).attr('data-command');
-        if (quickCommand) {
-            var wasPaused = term.paused();
-            term.exec(quickCommand);
-            if (!wasPaused) term.focus(true);
-        }
-    });
     startCountdown();
 
     // ---------- konami code: ↑ ↑ ↓ ↓ ← → ← → b a ----------

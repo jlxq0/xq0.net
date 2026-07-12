@@ -162,26 +162,14 @@
         </section>
 
         <section class="dossier-section" id="privacy" aria-labelledby="privacy-title">
-          <p class="dossier-label">File 04 / Local operation</p>
+          <p class="dossier-label">File 04</p>
           <h2 id="privacy-title">Privacy</h2>
-          <p>This is a static site with no account, analytics, contact form, or chat backend. The host still receives ordinary web request metadata. <code>posts</code> calls the public Mastodon API. After explicit consent, <code>chat</code> fetches WebLLM 0.2.84 and named Qwen model files from public upstream hosts. The runtime version is fixed; upstream model assets may be updated there. Prompts, answers, and inference stay in the browser. Recognized terminal commands may be kept locally for arrow-key recall, while free-form questions are not. Use <code>history clear</code> to erase that recall, or clear this site's browser data to remove cached model files. External links have their own privacy rules.</p>
+          <p>This is a static site with no analytics or chat backend. After you agree to the download, <code>chat</code> runs locally in your browser. Recognized commands may be saved for arrow-key recall; questions are not. Use <code>history clear</code> to remove saved commands.</p>
         </section>
       </article>
     </main>
 
-    <p id="terminal-instructions" class="visually-hidden">This page becomes an interactive command terminal when JavaScript loads. Type help for available commands, or use the quick input controls.</p>
-
-    <nav class="command-deck" aria-label="Quick input">
-      <span class="command-deck__label" aria-hidden="true">Quick input</span>
-      <div class="command-deck__commands">
-        <a href="#about" data-command="about"><span aria-hidden="true">&gt;:</span> about</a>
-        <a href="#projects" data-command="projects"><span aria-hidden="true">&gt;:</span> projects</a>
-        <a href="#contact" data-command="contact"><span aria-hidden="true">&gt;:</span> contact</a>
-        <a href="#privacy" data-command="privacy"><span aria-hidden="true">&gt;:</span> privacy</a>
-        <a href="#term" data-command="help"><span aria-hidden="true">&gt;:</span> help</a>
-        <a href="#term" data-command="chat"><span aria-hidden="true">&gt;:</span> wake station</a>
-      </div>
-    </nav>
+    <p id="terminal-instructions" class="visually-hidden">This page becomes an interactive command terminal when JavaScript loads. Type help for available commands.</p>
 
     <time id="countdown" datetime="PT1M48S" role="timer" aria-label="Station countdown">01:48</time>
   </body>

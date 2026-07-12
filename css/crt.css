@@ -437,94 +437,6 @@ body::after {
   73% { opacity: 0.38; }
 }
 
-/* ---- persistent touch / keyboard command rail ---- */
-.command-deck {
-  width: min(52rem, calc(100vw - 2rem));
-  display: flex;
-  align-items: stretch;
-  border: 1px solid var(--crt-border);
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  left: 50%;
-  position: fixed;
-  transform: translateX(-50%);
-  z-index: 200;
-  background: var(--crt-bg);
-  background: color-mix(in srgb, var(--crt-bg) 92%, transparent);
-  box-shadow: 0 0 26px rgba(0, 0, 0, 0.5), 0 0 12px var(--crt-glow);
-}
-
-@supports (backdrop-filter: blur(8px)) {
-  .command-deck {
-    backdrop-filter: blur(8px);
-  }
-}
-
-.command-deck__label {
-  display: grid;
-  flex: 0 0 auto;
-  padding: 0 1rem;
-  place-items: center;
-  border-right: 1px solid var(--crt-border);
-  color: var(--crt-dim);
-  font-size: 0.63rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.command-deck__commands {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.command-deck__commands::-webkit-scrollbar {
-  display: none;
-}
-
-.command-deck a {
-  min-height: 2.9rem;
-  display: inline-flex;
-  flex: 1 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 0.7rem 0.9rem;
-  border-right: 1px solid var(--crt-border);
-  color: var(--crt-link);
-  font-size: 0.72rem;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.command-deck a:last-child {
-  border-right: 0;
-}
-
-.command-deck a span {
-  margin-right: 0.36rem;
-  color: var(--crt-fg);
-}
-
-.command-deck a:hover,
-.command-deck a:focus-visible {
-  color: var(--crt-bg);
-  background: var(--crt-fg);
-  text-shadow: none;
-}
-
-.command-deck a:hover span,
-.command-deck a:focus-visible span {
-  color: inherit;
-}
-
-.command-deck a:focus-visible {
-  outline: 2px solid var(--crt-link);
-  outline-offset: -4px;
-}
-
 /* ---- 108 countdown timer ---- */
 #countdown {
   top: max(1rem, env(safe-area-inset-top));
@@ -597,22 +509,6 @@ body.system-failure #countdown {
     min-height: 0;
   }
 
-  .command-deck {
-    width: 100%;
-    border-width: 1px 0 0;
-    bottom: 0;
-    left: 0;
-    transform: none;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .command-deck__label {
-    display: none;
-  }
-
-  .command-deck a {
-    min-height: 3rem;
-  }
 }
 
 @media (max-width: 430px) {
@@ -637,10 +533,6 @@ body.system-failure #countdown {
     padding-bottom: max(4.3rem, calc(env(safe-area-inset-bottom) + 3.8rem));
   }
 
-  .command-deck a {
-    min-height: 2.6rem;
-    padding-block: 0.45rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -669,7 +561,6 @@ body.system-failure #countdown {
     display: none;
   }
 
-  .command-deck,
   .project-grid,
   .project-grid li {
     background: Canvas;
@@ -689,7 +580,6 @@ body.system-failure #countdown {
   body::before,
   body::after,
   .boot-sequence,
-  .command-deck,
   #countdown,
   .terminal-output,
   .cmd {
