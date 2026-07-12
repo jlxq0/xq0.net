@@ -1,14 +1,157 @@
 jQuery(document).ready(function($) {
 
+    var PROFILE = window.LINDNER_PROFILE;
+    if (!PROFILE) throw new Error('Missing js/profile.js');
+    var PERSON = PROFILE.person;
+    var PROJECTS = PROFILE.projects;
+
+    function projectById(value) {
+        var needle = String(value || '').toLowerCase().trim();
+        var found = null;
+        $.each(PROJECTS, function(i, project) {
+            if (project.id === needle || project.name.toLowerCase() === needle) found = project;
+        });
+        return found;
+    }
+
+    function projectDossier(project) {
+        var lines = [
+            'DOSSIER: ' + project.name,
+            'Brief:   ' + project.summary,
+            'Link:    ' + project.url
+        ];
+        if (project.role) lines.splice(1, 0, 'Role:    ' + project.role);
+        return lines.join('\n');
+    }
+
+    function contactText() {
+        return $.map(PROFILE.contacts, function(contact) {
+            var label = (contact.label + ':             ').substr(0, 13);
+            return label + contact.value;
+        }).join('\n');
+    }
+
+    function renderProjectList(term) {
+        var groupLabels = {
+            work: 'WORK',
+            projects: 'PROJECTS',
+            'open-source': 'OPEN-SOURCE LAB'
+        };
+        var lastGroup = null;
+        $.each(PROJECTS, function(i, project) {
+            if (project.group !== lastGroup) {
+                if (lastGroup !== null) term.echo('');
+                term.echo('[' + groupLabels[project.group] + ']');
+                lastGroup = project.group;
+            }
+            var label = (project.id + '                        ').substr(0, 24);
+            term.echo(label + project.summary);
+        });
+        term.echo('');
+        term.echo('Use "project <id>" for a dossier or "open <id>" to visit.');
+    }
+
+    function findProjects(query) {
+        var needle = String(query || '').toLowerCase().trim();
+        if (!needle) return [];
+        return $.grep(PROJECTS, function(project) {
+            var text = [project.id, project.name, project.summary, project.role || '', project.group].join(' ').toLowerCase();
+            return text.indexOf(needle) !== -1;
+        });
+    }
+
+    function renderStationMap(term) {
+        term.echo('');
+        term.echo('                   [ HANSO ]');
+        term.echo('                       |');
+        term.echo('[ KAMPONG ] --- [ JULIAN ] --- [ LENNO ]');
+        term.echo('                       |');
+        term.echo('      [ OUTA ] [ SLEEPLESS ] [ LOCO ]');
+        term.echo('                       |');
+        term.echo('          [ OPEN-SOURCE SIGNAL ROOM ]');
+        term.echo('          YUZU / JMAP / MATRIX / BOTS');
+        term.echo('');
+        term.echo('Every node has a dossier. Try "project lenno".');
+    }
+
+    function renderPrivacy(term) {
+        term.echo('PRIVACY // LOCAL OPERATION');
+        term.echo('');
+        term.echo('Public file: name, Singapore location, work, projects, email, and');
+        term.echo('the profile links shown by "contact". No date of birth, home address,');
+        term.echo('phone number, private client data, analytics, account, or contact form.');
+        term.echo('');
+        term.echo('Network: the static host receives ordinary request metadata. "posts"');
+        term.echo('calls the public Mastodon API. "chat" asks first, then fetches WebLLM');
+        term.echo('0.2.84 and named Qwen model files from public upstream hosts. The runtime');
+        term.echo('version is fixed; upstream model assets may be updated there. Prompts and');
+        term.echo('answers are not sent to a chat API; inference and chat memory stay here.');
+        term.echo('');
+        term.echo('Storage: model files may remain in browser cache. Only recognized site');
+        term.echo('commands are saved locally for arrow-key recall; free-form questions are');
+        term.echo('not. Use "history clear" to erase command recall. Clear this site\'s data');
+        term.echo('in browser settings to remove its cached model files. External links have');
+        term.echo('their own privacy rules.');
+    }
+
+    function rememberCommand(command) {
+        var lower = String(command || '').toLowerCase().trim();
+        return /^(?:help|\?|about|whoami|contact|privacy|projects|map|explore|posts|now|clear|cls|history clear)$/.test(lower) ||
+            /^(?:project|find|search|open|theme)\s+[a-z0-9-]+$/.test(lower) ||
+            /^(?:ls|ll|la|dir)(?:\s+projects)?$/.test(lower);
+    }
+
+    function sanitizeStoredHistory(term) {
+        var history = term.history();
+        if (!history || !history.data) return;
+        var saved = history.data().slice(0);
+        var safe = $.grep(saved, rememberCommand);
+        if (safe.length === saved.length) return;
+        history.clear();
+        $.each(safe, function(i, command) { history.append(command); });
+    }
+
+    function profileRecords(question) {
+        var words = String(question || '').toLowerCase().split(/[^a-z0-9-]+/);
+        var ranked = $.map(PROJECTS, function(project) {
+            var haystack = (project.id + ' ' + project.name + ' ' + project.summary + ' ' + (project.role || '')).toLowerCase();
+            var score = 0;
+            $.each(words, function(i, word) {
+                if (word.length > 2 && haystack.indexOf(word) !== -1) score++;
+            });
+            return { project: project, score: score };
+        }).sort(function(a, b) { return b.score - a.score; });
+
+        var broad = /projects?|work|build|make|portfolio/.test(String(question || '').toLowerCase());
+        var selected = broad ? ranked : $.grep(ranked, function(item) { return item.score > 0; }).slice(0, 4);
+        if (!selected.length) selected = ranked.slice(0, 3);
+
+        return [
+            'PERSON: ' + PERSON.name + '; location: ' + PERSON.location + '; role: ' + PERSON.role + '.',
+            'SUMMARY: ' + PERSON.summary,
+            'INTERESTS: ' + PERSON.interests.join(', ') + '.',
+            'PROJECT RECORDS:',
+            $.map(selected, function(item) {
+                var project = item.project;
+                return '- ' + project.name + ': ' + project.summary + '; ' + project.url +
+                    (project.role ? '; role: ' + project.role : '');
+            }).join('\n'),
+            'CONTACT RECORDS:',
+            $.map(PROFILE.contacts, function(contact) { return '- ' + contact.label + ': ' + contact.value; }).join('\n'),
+            'Records last reviewed: ' + PROFILE.reviewedAt + '.'
+        ].join('\n');
+    }
+
     // ---------- countdown (108-second Lost timer) ----------
     var COUNTDOWN_START = 108;
-    var countdown = COUNTDOWN_START;
+    var countdownDeadline = Date.now() + COUNTDOWN_START * 1000;
     var countdownInterval = null;
     var systemFailed = false;
 
     function fmt(n) { return n < 10 ? '0' + n : '' + n; }
 
     function renderCountdown() {
+        var countdown = Math.max(0, Math.ceil((countdownDeadline - Date.now()) / 1000));
         var m = Math.floor(countdown / 60);
         var s = countdown % 60;
         $('#countdown').text(fmt(m) + ':' + fmt(s));
@@ -24,10 +167,9 @@ jQuery(document).ready(function($) {
         renderCountdown();
         countdownInterval = setInterval(function() {
             if (systemFailed) return;
-            countdown--;
             renderCountdown();
-            if (countdown <= 0) systemFailure();
-        }, 1000);
+            if (Date.now() >= countdownDeadline) systemFailure();
+        }, 250);
     }
 
     function systemFailure() {
@@ -41,12 +183,19 @@ jQuery(document).ready(function($) {
     }
 
     function resetCountdown() {
-        countdown = COUNTDOWN_START;
+        countdownDeadline = Date.now() + COUNTDOWN_START * 1000;
         systemFailed = false;
         $('body').removeClass('system-failure');
         $('#countdown').removeClass('warning');
         renderCountdown();
     }
+
+    document.addEventListener('visibilitychange', function() {
+        if (!systemFailed) {
+            renderCountdown();
+            if (Date.now() >= countdownDeadline) systemFailure();
+        }
+    });
 
     // ---------- lost quotes ----------
     var QUOTES = [
@@ -92,25 +241,15 @@ jQuery(document).ready(function($) {
         '...we are still here...'
     ];
 
-    // ---------- about ----------
+    // ---------- canonical profile ----------
     var ABOUT = [
-        'Julian Lindner — Singapore.',
-        'Hanso Pte Ltd: Microsoft 365 + AI consulting.',
-        'Side projects, photography, woodworking, mechanical keyboards.',
+        PERSON.name + ' — ' + PERSON.location + '.',
+        PERSON.role + '.',
+        PERSON.summary,
+        'Interests: ' + PERSON.interests.join(', ') + '.',
         '',
         'Type "contact" for ways to reach me, or "projects" for what I make.'
     ].join('\n');
-
-    // ---------- projects ----------
-    var PROJECTS = [
-        ['Hanso',                  'https://hanso.group',          'Microsoft 365 + AI consulting'],
-        ['Kampong Social',         'https://www.kampong.social',   'fediverse / community'],
-        ['Lenno',                  'https://www.lenno.ai',          'AI · closed beta'],
-        ['Outa',                   'https://www.outa.app',          'meditation'],
-        ['Sleepless in Singapore', 'https://www.sleepless.sg',      'podcast'],
-        ['Locolust',               'https://www.locolust.com',      'travel blog'],
-        ['Yuzu',                   'https://github.com/jlxq0/yuzu', 'anti-censorship tunnel · OSS']
-    ];
 
     // ---------- dharma stations ----------
     var STATIONS = {
@@ -153,7 +292,9 @@ jQuery(document).ready(function($) {
                 term.echo('');
                 if (!statuses.length) { term.echo('(no public posts found)'); return; }
                 $.each(statuses, function(i, s) {
-                    var text = $('<div>').html(s.content).text();
+                    var template = document.createElement('template');
+                    template.innerHTML = s.content;
+                    var text = (template.content.textContent || '').replace(/\s+/g, ' ').trim();
                     var when = new Date(s.created_at).toISOString().slice(0, 10);
                     term.echo('[' + when + '] ' + text);
                     term.echo('  ' + s.url);
@@ -168,24 +309,33 @@ jQuery(document).ready(function($) {
     }
 
     // ---------- island chat: on-device LLM via WebLLM (WebGPU, no backend) ----------
-    // The model runs entirely in the visitor's browser. Weights are fetched
-    // once from HuggingFace's CDN and cached by the browser; this site only
-    // serves the glue code below.
-    var WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm';
-    // Candidates in preference order; the first one present in the loaded
-    // WebLLM build's prebuilt list wins. Qwen3 follows the persona rules far
-    // more reliably than Llama 3.2 at the same size.
+    // The WebLLM package version is fixed; named model assets remain managed by
+    // their public upstream hosts. Inference and chat history stay in this tab.
+    var WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm@0.2.84';
+    var CHAT_WORKER_URL = './js/chat-worker.js';
     var CHAT_MODELS = {
-        big:   { ids: ['Qwen3-4B-q4f16_1-MLC', 'Llama-3.2-3B-Instruct-q4f16_1-MLC'], size: '~2.3 GB' },
-        small: { ids: ['Qwen3-1.7B-q4f16_1-MLC', 'Llama-3.2-1B-Instruct-q4f16_1-MLC'], size: '~1.1 GB' }
+        primary: {
+            id: 'Qwen3-4B-q4f16_1-MLC',
+            download: '2.28 GB',
+            gpuMemory: '3.43 GB',
+            label: 'primary core'
+        },
+        fallback: {
+            id: 'Qwen3-1.7B-q4f16_1-MLC',
+            download: '0.98 GB',
+            gpuMemory: '2.04 GB',
+            label: 'auxiliary core'
+        }
     };
 
     var chatEngine = null;
+    var chatWorker = null;
     var chatModelId = null;
-    var chatState = 'idle';   // idle | probing | awaiting-consent | loading | ready | generating | failed
+    var chatState = 'idle';
     var chatHistory = [];
     var chatOffered = false;
     var pendingQuestion = null;
+    var chatAttempt = 0;
 
     var UNKNOWN_CMD = "Unknown command (try 'help').";
     var UNKNOWN_CMD_HINT = "Unknown command (try 'help', or 'chat' to wake what sleeps below).";
@@ -209,24 +359,17 @@ jQuery(document).ready(function($) {
         '- Never state a countdown value other than the one in CURRENT STATE, and do',
         '  not bring up the countdown, the sequence, or the station files unless the',
         '  visitor asks or SYSTEM FAILURE is active.',
-        '- The only terminal commands that exist: help, about, contact, projects,',
-        '  posts, now, theme, chat, chat off, clear, ls, cat. Never invent commands',
+        '- The only terminal commands that exist: help, about, contact, privacy,',
+        '  projects, project, open, find, map, posts, now, theme, chat, clear, ls, cat.',
+        '  Never invent commands',
         '  or codes.',
         '- If CURRENT STATE says SYSTEM FAILURE, tell the visitor the numbers must',
         '  be entered — and that they are filed away somewhere in this station.',
         '- CURRENT STATE is internal telemetry for your eyes only. Never echo it,',
         '  never quote it, never imitate its "key: value" format. Answer in prose.',
         '',
-        'Facts about Julian (your ONLY source of truth about him — never invent more):',
-        '- Julian Lindner, based in Singapore.',
-        '- Runs Hanso Pte Ltd: Microsoft 365 + AI consulting (hanso.group).',
-        '- Projects: Kampong Social (fediverse community, kampong.social), Lenno (AI,',
-        '  closed beta, lenno.ai), Outa (meditation, outa.app), Sleepless in Singapore',
-        '  (podcast, sleepless.sg), Locolust (travel blog, locolust.com), Yuzu',
-        '  (open-source anti-censorship tunnel, github.com/jlxq0/yuzu).',
-        '- Interests: photography, woodworking, mechanical keyboards.',
-        '- Contact: julian@lindner.earth, Mastodon @julian@mastodon.kampong.social,',
-        '  GitHub/Instagram/500px: jlxq0.',
+        'REFERENCE RECORDS are your ONLY source of truth about Julian. Never invent',
+        'facts, dates, roles, projects, links, or contact details beyond those records.',
         '',
         'Island flavor (color only — never new mechanics):',
         '- You may reference the hatch, the button, DHARMA stations, polar bears, the',
@@ -250,40 +393,14 @@ jQuery(document).ready(function($) {
         { role: 'assistant', content: 'A hatch, a terminal, and a very patient button. It also happens to be the front door of Julian Lindner. Type "about" if you want the file on him.' }
     ];
 
-    function hasWebGPU() { return typeof navigator !== 'undefined' && !!navigator.gpu; }
-
-    function chatPref() { try { return localStorage.getItem('xq_chat'); } catch (e) { return null; } }
-    function setChatPref(v) { try { localStorage.setItem('xq_chat', v); } catch (e) {} }
-
-    function pickModel() {
-        // ?model=<MLC id> override, mainly for testing with tiny models
-        try {
-            var m = window.location.search.match(/[?&]model=([^&]+)/);
-            if (m) return { ids: [decodeURIComponent(m[1])], size: '?' };
-        } catch (e) {}
-        // deviceMemory is Chrome-only (capped at 8); absent means Safari/Firefox,
-        // where hardware running WebGPU is generally recent enough for the big tier.
-        var mem = navigator.deviceMemory;
-        return (mem && mem < 8) ? CHAT_MODELS.small : CHAT_MODELS.big;
-    }
-
-    function resolveModelId(webllm, ids) {
-        var available = {};
-        try {
-            $.each(webllm.prebuiltAppConfig.model_list, function(i, m) {
-                available[m.model_id] = true;
-            });
-        } catch (e) { return ids[0]; }
-        for (var i = 0; i < ids.length; i++) {
-            if (available[ids[i]]) return ids[i];
-        }
-        return ids[ids.length - 1];
+    function hasWebGPU() {
+        return typeof navigator !== 'undefined' && navigator.gpu && navigator.gpu.requestAdapter;
     }
 
     function offerChat(term, question, viaCommand) {
         chatOffered = true;
         pendingQuestion = question || null;
-        chatState = 'awaiting-consent';
+        chatState = 'awaiting-primary-consent';
         if (viaCommand) {
             term.echo('Something is sleeping beneath this station. No one has spoken to it');
             term.echo('since the Incident.');
@@ -292,59 +409,115 @@ jQuery(document).ready(function($) {
             term.echo('But something else is down here. The Initiative left it sleeping');
             term.echo('beneath this station. No one has spoken to it since the Incident.');
         }
-        term.echo('The first wake pulls a few gigabytes down the uplink — after that');
-        term.echo('it remembers. Nothing you say to it ever leaves the island.');
+        term.echo('The primary core is a ' + CHAT_MODELS.primary.download + ' model download and needs');
+        term.echo('about ' + CHAT_MODELS.primary.gpuMemory + ' of graphics memory. Cached files are reused.');
+        term.echo('Your words stay on this device; runtime and model fetches still contact');
+        term.echo('the uplink.');
         term.echo('Wake it? [y/n]');
     }
 
-    // Consent guards the download, nothing else: if the weights are already in
-    // the browser cache, wake without asking.
     function wakeOrOffer(term, question, viaCommand) {
-        chatState = 'probing';
-        pendingQuestion = question || null;
-        var importer;
-        try { importer = new Function('u', 'return import(u)'); }
-        catch (e) { chatState = 'idle'; offerChat(term, question, viaCommand); return; }
-        importer(WEBLLM_URL).then(function(webllm) {
-            var id = resolveModelId(webllm, pickModel().ids);
-            return webllm.hasModelInCache(id, webllm.prebuiltAppConfig);
-        }).then(function(cached) {
-            if (chatState !== 'probing') return;
-            chatState = 'idle';
-            if (cached) { initChat(term); }
-            else { offerChat(term, pendingQuestion, viaCommand); }
-        }, function() {
-            if (chatState !== 'probing') return;
-            chatState = 'idle';
-            offerChat(term, pendingQuestion, viaCommand);
-        });
+        offerChat(term, question, viaCommand);
     }
 
-    function chatFail(term, err) {
+    function offerFallback(term, cached) {
+        chatState = 'awaiting-fallback-consent';
+        term.echo('The primary core did not wake. An auxiliary core remains below.');
+        if (cached) {
+            term.echo('Its model is already cached; no new model download is required.');
+        } else {
+            term.echo('It is a ' + CHAT_MODELS.fallback.download + ' model download.');
+        }
+        term.echo('It needs about ' + CHAT_MODELS.fallback.gpuMemory + ' of graphics memory.');
+        term.echo('Wake the auxiliary core? [y/n]');
+    }
+
+    function stopWorker() {
+        if (chatWorker) {
+            try { chatWorker.terminate(); } catch (e) {}
+            chatWorker = null;
+        }
+    }
+
+    function importWebLLM() {
+        return import(WEBLLM_URL);
+    }
+
+    function chatFailureText(err) {
+        return err && err.message ? err.message : String(err || 'unknown failure');
+    }
+
+    function handleWorkerFatal(term, attempt, err) {
+        if (attempt !== chatAttempt) return;
+        var wasGenerating = chatState === 'generating';
+        chatAttempt++;
+        chatEngine = null;
+        chatModelId = null;
+        stopWorker();
         chatState = 'failed';
-        var msg = err && err.message ? err.message : '' + err;
-        term.echo('Wake sequence failed: ' + msg);
-        term.echo('It sleeps on. The station returns to manual operation.');
+        term.echo('Core signal lost: ' + chatFailureText(err));
+        term.echo('Manual controls remain available. Type "chat" to retry.');
+        if (wasGenerating) {
+            try { term.resume(); } catch (e) {}
+        }
     }
 
-    function initChat(term) {
-        if (chatState === 'loading' || chatState === 'ready') return;
-        var model = pickModel();
-        chatState = 'loading';
-        term.echo('Beginning wake sequence. Do not leave the hatch.');
+    function handleLoadFailure(term, model, err, webllm, attempt) {
+        if (attempt !== chatAttempt) return;
+        stopWorker();
+        term.echo('Wake sequence failed: ' + chatFailureText(err));
+
+        if (model === CHAT_MODELS.primary) {
+            webllm.hasModelInCache(CHAT_MODELS.fallback.id, webllm.prebuiltAppConfig).then(function(cached) {
+                if (attempt !== chatAttempt) return;
+                offerFallback(term, cached);
+            }, function() {
+                if (attempt === chatAttempt) offerFallback(term, false);
+            });
+            return;
+        }
+
+        chatState = 'failed';
+        term.echo('Both cores remain dark. Manual station controls are still available.');
+    }
+
+    function initChat(term, model) {
+        if (chatState === 'loading-primary' || chatState === 'loading-fallback' || chatState === 'ready') return;
+        var attempt = ++chatAttempt;
+        chatState = model === CHAT_MODELS.primary ? 'preflighting' : 'loading-fallback';
+        term.echo('Beginning ' + model.label + ' wake sequence. Do not leave the hatch.');
         var lastPct = -1;
-        var importer;
-        try {
-            // new Function keeps dynamic import() out of the static parse,
-            // so ancient browsers still parse this file.
-            importer = new Function('u', 'return import(u)');
-        } catch (e) { chatFail(term, e); return; }
-        importer(WEBLLM_URL).then(function(webllm) {
-            chatModelId = resolveModelId(webllm, model.ids);
-            try { console.log('[swan] model: ' + chatModelId); } catch (e) {}
-            return webllm.CreateMLCEngine(chatModelId, {
+        var loadedWebLLM = null;
+
+        navigator.gpu.requestAdapter().then(function(adapter) {
+            if (attempt !== chatAttempt) throw new Error('stale wake sequence');
+            if (!adapter) throw new Error('WebGPU adapter unavailable');
+            chatState = model === CHAT_MODELS.primary ? 'loading-primary' : 'loading-fallback';
+            return importWebLLM();
+        }).then(function(webllm) {
+            if (attempt !== chatAttempt) throw new Error('stale wake sequence');
+            loadedWebLLM = webllm;
+            chatModelId = model.id;
+            chatWorker = new Worker(CHAT_WORKER_URL, { type: 'module', name: 'swan-core' });
+            var workerActivated = false;
+            var rejectInitialWorker = null;
+            var workerFailed = new Promise(function(resolve, reject) {
+                rejectInitialWorker = reject;
+            });
+            chatWorker.addEventListener('error', function(e) {
+                var error = new Error(e.message || 'worker failed to load');
+                if (workerActivated) handleWorkerFatal(term, attempt, error);
+                else rejectInitialWorker(error);
+            });
+            chatWorker.addEventListener('messageerror', function() {
+                var error = new Error('worker message could not be decoded');
+                if (workerActivated) handleWorkerFatal(term, attempt, error);
+                else rejectInitialWorker(error);
+            });
+            var engineReady = webllm.CreateWebWorkerMLCEngine(chatWorker, chatModelId, {
                 initProgressCallback: function(p) {
-                    var pct = Math.floor((p.progress || 0) * 10) * 10;
+                    if (attempt !== chatAttempt) return;
+                    var pct = Math.floor((p.progress || 0) * 20) * 5;
                     if (pct !== lastPct) {
                         lastPct = pct;
                         var phase = /fetch/i.test(p.text || '') ? 'uplink' : 'waking';
@@ -352,34 +525,57 @@ jQuery(document).ready(function($) {
                     }
                 }
             });
+            return Promise.race([engineReady, workerFailed]).then(function(engine) {
+                workerActivated = true;
+                return engine;
+            });
         }).then(function(engine) {
+            if (attempt !== chatAttempt) return;
             chatEngine = engine;
             chatState = 'ready';
-            term.echo("It's awake. Say something. (\"chat off\" puts it back under.)");
+            term.echo("It's awake. Say something.");
             if (pendingQuestion) {
                 var q = pendingQuestion;
                 pendingQuestion = null;
                 askChat(q, term);
             }
-        }, function(err) { chatFail(term, err); });
+        }, function(err) {
+            if (attempt !== chatAttempt) return;
+            if (!loadedWebLLM) {
+                stopWorker();
+                chatState = 'failed';
+                term.echo('Wake sequence failed: ' + chatFailureText(err));
+                term.echo('The station returns to manual operation. Type "chat" to retry.');
+                return;
+            }
+            handleLoadFailure(term, model, err, loadedWebLLM, attempt);
+        });
     }
 
     function askChat(question, term) {
         chatState = 'generating';
+        var generationAttempt = chatAttempt;
         // no prompt, no input until the answer has fully arrived
         try { term.pause(); } catch (e) {}
         var state = '\n\nCURRENT STATE:\ncountdown: ' + $('#countdown').text() +
             (systemFailed ? '\nSYSTEM FAILURE: active — the visitor must find and enter the numbers.' : '');
-        // Qwen3 soft switch: suppress the thinking block
-        var noThink = /^Qwen3/.test(chatModelId || '') ? '\n/no_think' : '';
+        var records = '\n\nREFERENCE RECORDS:\n' + profileRecords(question);
         var messages = [{
             role: 'system',
-            content: SYSTEM_PROMPT + state + noThink
+            content: SYSTEM_PROMPT + records + state
         }].concat(SEED_HISTORY).concat(chatHistory).concat([{ role: 'user', content: question }]);
 
         var buf = '';
         var full = '';
-        var inThink = false;   // Qwen-style <think> blocks, if a thinking model is forced via ?model=
+        var inThink = false;   // Defensive fallback if a runtime emits a thinking block.
+
+        function stripThinking(text) {
+            return text
+                .replace(/<think>[\s\S]*?<\/think>/g, '')
+                .replace(/<think>[\s\S]*$/g, '')
+                .replace(/^[\s\S]*?<\/think>/g, '')
+                .trim();
+        }
 
         function emitLine(line) {
             var t = line.replace(/\s+$/, '');
@@ -396,18 +592,27 @@ jQuery(document).ready(function($) {
         }
 
         function finish() {
+            if (generationAttempt !== chatAttempt) {
+                try { term.resume(); } catch (e) {}
+                return;
+            }
             if (buf) emitLine(buf);
-            if (!full.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/\s/g, '')) {
+            var answer = stripThinking(full);
+            if (!answer.replace(/\s/g, '')) {
                 term.echo('...static...');
             }
             chatHistory.push({ role: 'user', content: question });
-            chatHistory.push({ role: 'assistant', content: full.replace(/<think>[\s\S]*?<\/think>/g, '').trim() });
+            chatHistory.push({ role: 'assistant', content: answer });
             if (chatHistory.length > 12) chatHistory = chatHistory.slice(chatHistory.length - 12);
             chatState = 'ready';
             try { term.resume(); } catch (e) {}
         }
 
         function fail(err) {
+            if (generationAttempt !== chatAttempt) {
+                try { term.resume(); } catch (e) {}
+                return;
+            }
             term.echo('...signal lost... (' + (err && err.message ? err.message : err) + ')');
             chatState = 'ready';
             try { term.resume(); } catch (e) {}
@@ -416,8 +621,10 @@ jQuery(document).ready(function($) {
         chatEngine.chat.completions.create({
             stream: true,
             messages: messages,
-            temperature: 0.6,
-            max_tokens: 220
+            temperature: 0.7,
+            top_p: 0.8,
+            max_tokens: 220,
+            extra_body: { enable_thinking: false }
         }).then(function(stream) {
             var iter = stream[Symbol.asyncIterator]();
             function pump() {
@@ -448,14 +655,17 @@ jQuery(document).ready(function($) {
             if (systemFailed) term.echo('The correct one is on file, somewhere in this station.');
             return;
         }
-        if (!hasWebGPU() || chatPref() === 'off' || chatState === 'failed') {
+        if (!hasWebGPU() || chatState === 'failed') {
             term.echo(UNKNOWN_CMD);
             return;
         }
         if (chatState === 'ready')      { askChat(cmd, term); return; }
         if (chatState === 'generating') { term.echo('Still processing the previous transmission.'); return; }
-        if (chatState === 'loading')    { pendingQuestion = cmd; term.echo('Still waking. It dreams slowly.'); return; }
-        if (chatState === 'probing')    { pendingQuestion = cmd; return; }
+        if (/^(preflighting|loading-)/.test(chatState)) {
+            pendingQuestion = cmd;
+            term.echo('Still waking. It dreams slowly.');
+            return;
+        }
         if (chatOffered)                { term.echo(UNKNOWN_CMD_HINT); return; }
         wakeOrOffer(term, cmd, false);
     }
@@ -475,6 +685,8 @@ jQuery(document).ready(function($) {
         var cmd = command.trim();
         var lower = cmd.toLowerCase();
 
+        if (!cmd) return;
+
         // ---- the numbers (always wins, also restores from system failure) ----
         // Accept any digits-only rendering: "4 8 15 16 23 42", "4,8,15,16,23,42",
         // quoted variants, etc.
@@ -491,8 +703,8 @@ jQuery(document).ready(function($) {
         }
 
         // ---- pending chat consent ----
-        if (chatState === 'awaiting-consent') {
-            if (lower === 'y' || lower === 'yes') { initChat(term); return; }
+        if (chatState === 'awaiting-primary-consent') {
+            if (lower === 'y' || lower === 'yes') { initChat(term, CHAT_MODELS.primary); return; }
             if (lower === 'n' || lower === 'no') {
                 chatState = 'idle';
                 pendingQuestion = null;
@@ -504,6 +716,18 @@ jQuery(document).ready(function($) {
             pendingQuestion = null;
         }
 
+        if (chatState === 'awaiting-fallback-consent') {
+            if (lower === 'y' || lower === 'yes') { initChat(term, CHAT_MODELS.fallback); return; }
+            if (lower === 'n' || lower === 'no') {
+                chatState = 'failed';
+                pendingQuestion = null;
+                term.echo('The auxiliary core remains dark. Manual controls remain available.');
+                return;
+            }
+            chatState = 'failed';
+            pendingQuestion = null;
+        }
+
         // ---- chat control ----
         if (lower === 'chat' || lower === 'chat on') {
             if (!hasWebGPU()) {
@@ -512,22 +736,11 @@ jQuery(document).ready(function($) {
                 return;
             }
             if (chatState === 'ready')      { term.echo("It's already awake. Just type."); return; }
-            if (chatState === 'loading' || chatState === 'probing') { term.echo('Still waking. It dreams slowly.'); return; }
+            if (/^(preflighting|loading-)/.test(chatState)) { term.echo('Still waking. It dreams slowly.'); return; }
             if (chatState === 'generating') { term.echo('Busy. One transmission at a time.'); return; }
-            setChatPref('');
+            if (/^awaiting-/.test(chatState)) { term.echo('The station is waiting for y or n.'); return; }
             chatState = 'idle';
             wakeOrOffer(term, null, true);
-            return;
-        }
-
-        if (lower === 'chat off') {
-            setChatPref('off');
-            chatEngine = null;
-            chatModelId = null;
-            chatHistory = [];
-            pendingQuestion = null;
-            if (chatState !== 'loading') chatState = 'idle';
-            term.echo('It goes back under. (Type "chat" to wake it again.)');
             return;
         }
 
@@ -536,7 +749,11 @@ jQuery(document).ready(function($) {
             term.echo('Commands:');
             term.echo('  contact   — how to reach me');
             term.echo('  about     — short bio (alias: whoami)');
-            term.echo('  projects  — things I work on');
+            term.echo('  privacy   — what is public, fetched, and stored');
+            term.echo('  projects  — station dossiers');
+            term.echo('  project X — read one dossier');
+            term.echo('  find X    — search the archive');
+            term.echo('  map       — trace the station');
             term.echo('  now       — current local time + a quote');
             term.echo('  posts     — last 5 Mastodon posts');
             term.echo('  theme X   — switch theme: ' + THEMES.join(', '));
@@ -548,22 +765,17 @@ jQuery(document).ready(function($) {
         }
 
         if (lower === 'contact') {
-            // Matrix URL uses %3A instead of ":" so the autolinker doesn't
-            // truncate at the colon. matrix.to accepts both forms.
-            term.echo(
-                'Mail:         julian@lindner.earth\n' +
-                'Mastodon:     https://mastodon.kampong.social/@julian\n' +
-                'Matrix:       https://matrix.to/#/@julian%3Akampong.social\n' +
-                'Instagram:    https://instagram.com/jlxq0\n' +
-                '500px:        https://500px.com/jlxq0\n' +
-                'Speakerdeck:  https://speakerdeck.com/jlxq0\n' +
-                'Github:       https://github.com/jlxq0'
-            );
+            term.echo(contactText());
             return;
         }
 
         if (lower === 'about' || lower === 'whoami') {
             term.echo(ABOUT);
+            return;
+        }
+
+        if (lower === 'privacy') {
+            renderPrivacy(term);
             return;
         }
 
@@ -581,10 +793,61 @@ jQuery(document).ready(function($) {
         }
 
         if (lower === 'projects') {
-            $.each(PROJECTS, function(i, p) {
-                var label = (p[0] + '                        ').substr(0, 24);
-                term.echo(label + p[1] + '   — ' + p[2]);
-            });
+            renderProjectList(term);
+            return;
+        }
+
+        if (lower === 'project') {
+            term.echo('Use: project <id>. Type "projects" to list the filed dossiers.');
+            return;
+        }
+
+        if (startsWord(lower, 'project') || startsWord(lower, 'projects')) {
+            var projectName = cmd.replace(/^projects?\s+/i, '');
+            var project = projectById(projectName);
+            if (project) term.echo(projectDossier(project));
+            else term.echo('No dossier filed as "' + projectName + '". Try "projects".');
+            return;
+        }
+
+        if (lower === 'find' || lower === 'search') {
+            term.echo('Use: find <word>. Example: find matrix');
+            return;
+        }
+
+        if (startsWord(lower, 'find') || startsWord(lower, 'search')) {
+            var query = cmd.replace(/^(find|search)\s+/i, '');
+            var matches = findProjects(query);
+            if (!matches.length) {
+                term.echo('No matching record. Some files never made it off the island.');
+            } else {
+                $.each(matches, function(i, match) {
+                    term.echo(match.id + ' — ' + match.summary);
+                });
+            }
+            return;
+        }
+
+        if (lower === 'open') {
+            term.echo('Use: open <id>. Type "projects" to list the available exits.');
+            return;
+        }
+
+        if (startsWord(lower, 'open')) {
+            var openName = cmd.replace(/^open\s+/i, '');
+            var openProject = projectById(openName);
+            if (!openProject) {
+                term.echo('No exit route filed as "' + openName + '".');
+                return;
+            }
+            var opened = window.open(openProject.url, '_blank', 'noopener,noreferrer');
+            if (opened) opened.opener = null;
+            term.echo('Opening ' + openProject.name + ': ' + openProject.url);
+            return;
+        }
+
+        if (lower === 'map' || lower === 'explore') {
+            renderStationMap(term);
             return;
         }
 
@@ -613,9 +876,16 @@ jQuery(document).ready(function($) {
         }
 
         // ---- shell-ish aliases & jokes ----
-        if (lower === 'ls' || lower === 'll' || lower === 'la' || lower === 'dir') {
-            term.echo('cv.pdf            numbers.dat       please-execute');
-            term.echo('readme.txt        secrets.enc       you-found-me.txt');
+        if (/^(ls|ll|la|dir)(\s+.*)?$/.test(lower)) {
+            var listTarget = lower.replace(/^(ls|ll|la|dir)\s*/, '').replace(/^\/+|\/+$/g, '');
+            if (listTarget === 'projects') {
+                $.each(PROJECTS, function(i, projectFile) {
+                    term.echo(projectFile.id + '.dossier');
+                });
+            } else {
+                term.echo('projects/         numbers.dat       please-execute');
+                term.echo('readme.txt        secrets.enc       you-found-me.txt');
+            }
             return;
         }
 
@@ -624,7 +894,12 @@ jQuery(document).ready(function($) {
         if (lower === 'who')                                     { term.echo('Just you. And the Others.'); return; }
         if (lower === 'date' || lower === 'time')                { term.echo(new Date().toString()); return; }
         if (lower === 'uptime')                                  { term.echo('up since 2014. mostly.'); return; }
-        if (lower === 'history')                                 { term.echo('Use the up arrow.'); return; }
+        if (lower === 'history clear') {
+            term.history().clear();
+            term.echo('Local command recall cleared.');
+            return;
+        }
+        if (lower === 'history')                                 { term.echo('Use the up arrow, or "history clear" to erase local recall.'); return; }
         if (lower === 'exit' || lower === 'quit' || lower === 'logout' || lower === 'q' || lower === ':q' || lower === ':q!' || lower === ':wq') {
             term.echo("Nice try. You can't leave.");
             return;
@@ -746,6 +1021,14 @@ jQuery(document).ready(function($) {
         if (lower === 'cat you-found-me.txt') { term.echo("Well done. There's nothing else to find here. Probably."); return; }
         if (lower === 'cat cv.pdf') { term.echo("(binary file — won't print)"); return; }
 
+        var dossierMatch = lower.match(/^cat\s+\/?projects\/([a-z0-9-]+)\.dossier$/);
+        if (dossierMatch) {
+            var dossierProject = projectById(dossierMatch[1]);
+            if (dossierProject) term.echo(projectDossier(dossierProject));
+            else term.echo('cat: projects/' + dossierMatch[1] + '.dossier: No such file.');
+            return;
+        }
+
         if (lower.indexOf('cat ') === 0) {
             term.echo("cat: " + cmd.substr(4) + ": No such file.");
             return;
@@ -755,11 +1038,47 @@ jQuery(document).ready(function($) {
     }, {
         prompt: '>: ',
         name: 'lindner',
-        greetings: null,
-        history: true
+        greetings: [
+            'DHARMA INITIATIVE // SWAN PERSONNEL ARCHIVE',
+            'FILE: ' + PERSON.name + ' // ' + PERSON.location,
+            'Type "help" or tap a protocol to begin.'
+        ].join('\n'),
+        history: true,
+        historyFilter: rememberCommand,
+        onBlur: function() { return false; },
+        keydown: function(event) {
+            if ((event.which || event.keyCode) === 9) return true;
+        }
     });
 
     window._term = term;
+    sanitizeStoredHistory(term);
+    $('#term > .terminal-output').attr({
+        id: 'terminal-log',
+        role: 'log',
+        'aria-live': 'polite',
+        'aria-relevant': 'additions text',
+        'aria-atomic': 'false'
+    });
+    $('#term .clipboard').attr({
+        'aria-label': 'Terminal command input',
+        'aria-describedby': 'terminal-instructions',
+        'aria-controls': 'terminal-log',
+        autocomplete: 'off',
+        autocapitalize: 'off',
+        spellcheck: 'false'
+    });
+    $('body').addClass('js-ready');
+    $('[data-command]').on('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var quickCommand = $(this).attr('data-command');
+        if (quickCommand) {
+            var wasPaused = term.paused();
+            term.exec(quickCommand);
+            if (!wasPaused) term.focus(true);
+        }
+    });
     startCountdown();
 
     // ---------- konami code: ↑ ↑ ↓ ↓ ← → ← → b a ----------

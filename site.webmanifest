@@ -1,0 +1,19 @@
+{
+  "name": "Julian Lindner / Station 3",
+  "short_name": "lindner.earth",
+  "description": "Julian Lindner's personal site and interactive Station 3 terminal.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#000800",
+  "theme_color": "#000800",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

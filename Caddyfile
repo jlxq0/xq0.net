@@ -17,8 +17,17 @@
 	handle {
 		root * /srv
 		# unfingerprinted assets → modest TTL so edits propagate (edge caches 300s)
-		header Cache-Control "public, max-age=300"
-		header X-Content-Type-Options nosniff
+		header {
+			Cache-Control "public, max-age=300"
+			Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-EDv/cUQ/a7rGXW/3e8BUlZyU/4/nIZKZ0n+lRDkeutk=' 'wasm-unsafe-eval' https://esm.run https://cdn.jsdelivr.net; connect-src 'self' https://mastodon.kampong.social https://esm.run https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://raw.githubusercontent.com https://*.hf.co https://*.xethub.hf.co; img-src 'self' data:; style-src 'self'; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+			Cross-Origin-Opener-Policy "same-origin"
+			Cross-Origin-Resource-Policy "same-origin"
+			Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+			Referrer-Policy "no-referrer"
+			Strict-Transport-Security "max-age=31536000; includeSubDomains"
+			X-Content-Type-Options nosniff
+			X-Frame-Options DENY
+		}
 		file_server
 	}
 }

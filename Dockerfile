@@ -1,7 +1,23 @@
-# lindner.earth — personal static site, served from fondue behind the anycast
-# edges. Same shape as oddie-apps/static-sites: stock Caddy + the site baked in
-# as an immutable, CI-built artifact. TLS + cache + anycast are the edge's job;
-# this is a plain HTTP origin on :8080 (non-root) reached over the tunnel.
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS bundle-check
+
+WORKDIR /build
+
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+
+COPY scripts/ scripts/
+COPY test/ test/
+COPY src/xq.js src/xq.js
+COPY js/xq.js js/xq.js
+COPY js/chat-worker.js js/jquery-1.7.1.min.js js/jquery.terminal-min.js js/profile.js js/
+COPY css/crt.css css/jquery.terminal.css css/
+COPY Caddyfile CNAME Dockerfile favicon.svg index.html pinterest-41d5c.html robots.txt site.webmanifest sitemap.xml ./
+
+# Refuse to publish a stale generated bundle or an incomplete runtime tree.
+RUN npm test
+
+# lindner.earth is served from fondue behind the anycast edges. TLS, compression,
+# and caching are the edge's job; this is a plain HTTP origin on :8080.
 FROM caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
 
 LABEL org.opencontainers.image.source="https://forge.oddie.app/jlxq0/lindner_web" \
@@ -14,10 +30,10 @@ RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap
 ENV XDG_CONFIG_HOME=/tmp/caddy \
     XDG_DATA_HOME=/tmp/caddy
 
-COPY Caddyfile /etc/caddy/Caddyfile
-COPY index.html pinterest-41d5c.html /srv/
-COPY css/ /srv/css/
-COPY js/  /srv/js/
+COPY --from=bundle-check /build/Caddyfile /etc/caddy/Caddyfile
+COPY --from=bundle-check /build/index.html /build/CNAME /build/favicon.svg /build/pinterest-41d5c.html /build/robots.txt /build/site.webmanifest /build/sitemap.xml /srv/
+COPY --from=bundle-check /build/css/crt.css /build/css/jquery.terminal.css /srv/css/
+COPY --from=bundle-check /build/js/chat-worker.js /build/js/jquery-1.7.1.min.js /build/js/jquery.terminal-min.js /build/js/profile.js /build/js/xq.js /srv/js/
 
 # fail the build on a malformed Caddyfile
 RUN caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

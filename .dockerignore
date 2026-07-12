@@ -1,6 +1,8 @@
 .git
 .forgejo
 k8s
-CNAME
 README.md
 .dockerignore
+node_modules
+npm-debug.log*
+js/_xq_unscrambled.js
