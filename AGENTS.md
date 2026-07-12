@@ -10,6 +10,7 @@
 
 - Keep the local LLM on WebLLM's direct `CreateMLCEngine` path. The worker-backed replacement failed to load in a real browser even though the direct engine had worked reliably.
 - Chat has one explicit consent gate for the Qwen3 4B download. Do not add automatic model selection, preflight probing, fallback models, or a second consent flow unless explicitly requested.
+- The chat system prompt is the original prompt introduced in commit `8dbd82b`. Do not expand it with telemetry rules, generated profile records, few-shot conversations, or additional style constraints unless explicitly requested.
 - Public biography, project, contact, and prompt facts come from `js/profile.js`; do not duplicate or hardcode them in the terminal source.
 - `js/xq.js` is generated. Edit `src/xq.js`, then run `npm run build` and commit both source and output.
 - The bundled jQuery Terminal version once deserialized local history with `new Function`. Keep the `JSON.parse` patch and its CSP regression test; executable-string parsing breaks strict CSP and turns browser storage into code.
