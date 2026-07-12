@@ -56,6 +56,12 @@ test("all runtime and discovery files exist", () => {
   }
 });
 
+test("the favicon uses the supplied bird artwork", () => {
+  const favicon = readFileSync(resolve(root, "favicon.svg"), "utf8");
+  assert.match(favicon, /viewBox="0 0 1042 878"/);
+  assert.match(favicon, /M251 34q-36 5-66 25/);
+});
+
 test("all runtime JavaScript parses", () => {
   for (const path of runtimeJavaScriptFiles) {
     const result = spawnSync(process.execPath, ["--check", resolve(root, path)], {
