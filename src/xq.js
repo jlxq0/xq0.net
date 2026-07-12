@@ -285,8 +285,7 @@ jQuery(document).ready(function($) {
     // their public upstream hosts. Inference and chat history stay in this tab.
     var WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm@0.2.84';
     var CHAT_MODEL = {
-        id: 'Qwen3-4B-q4f16_1-MLC',
-        download: '2.28 GB'
+        id: 'Qwen3-4B-q4f16_1-MLC'
     };
 
     var chatEngine = null;
@@ -302,7 +301,8 @@ jQuery(document).ready(function($) {
     var COMPLETIONS = [
         'help', 'about', 'contact', 'privacy', 'projects', 'project', 'find', 'open',
         'map', 'posts', 'now', 'theme', 'chat', 'clear', 'history', 'ls', 'll', 'pwd',
-        'whoami', 'date', 'time', 'please-execute', './please-execute', 'cat numbers.dat'
+        'whoami', 'date', 'time', 'please-execute', './please-execute',
+        'numbers.dat', 'readme.txt', 'secrets.enc', 'you-found-me.txt'
     ];
     $.each(PROJECTS, function(i, project) {
         COMPLETIONS.push(project.id);
@@ -368,9 +368,8 @@ jQuery(document).ready(function($) {
         pendingQuestion = question || null;
         chatState = 'awaiting-consent';
         if (!viaCommand) term.echo("That's not a command I recognize.");
-        term.echo('Chat uses Qwen3 4B locally in this browser. The first run downloads');
-        term.echo('about ' + CHAT_MODEL.download + '; cached files are reused. Prompts stay on this device.');
-        term.echo('Download and run it? [y/n]');
+        term.echo('Chat runs locally in this browser. The first use requires a large');
+        term.echo('download; cached files are reused. Continue? [y/n]');
     }
 
     function wakeOrOffer(term, question, viaCommand) {
@@ -389,7 +388,7 @@ jQuery(document).ready(function($) {
         if (chatState === 'loading' || chatState === 'ready') return;
         var attempt = ++chatAttempt;
         chatState = 'loading';
-        term.echo('Loading Qwen3 4B. Keep this tab open.');
+        term.echo('Loading local chat. Keep this tab open.');
         var lastPct = -1;
         importWebLLM().then(function(webllm) {
             if (attempt !== chatAttempt) throw new Error('stale wake sequence');
@@ -541,8 +540,24 @@ jQuery(document).ready(function($) {
         wakeOrOffer(term, cmd, false);
     }
 
-    function completeCommand(term, fragment, callback) {
-        callback(COMPLETIONS);
+    function completeTerminalInput(term) {
+        var command = term.get_command();
+        var tokenStart = command.lastIndexOf(' ') + 1;
+        var token = command.slice(tokenStart);
+        if (!token) return;
+        var matches = $.grep(COMPLETIONS, function(candidate) {
+            return candidate.indexOf(token) === 0;
+        });
+        if (!matches.length) return;
+        var completion = matches[0];
+        for (var i = 1; i < matches.length; i++) {
+            while (completion && matches[i].indexOf(completion) !== 0) {
+                completion = completion.slice(0, -1);
+            }
+        }
+        if (completion.length > token.length) {
+            term.set_command(command.slice(0, tokenStart) + completion);
+        }
     }
 
     function runPleaseExecute(term) {
@@ -933,10 +948,13 @@ jQuery(document).ready(function($) {
         greetings: null,
         history: true,
         historyFilter: rememberCommand,
-        tabcompletion: true,
-        completion: completeCommand,
         onBlur: function() { return false; },
-        keydown: function() {}
+        keydown: function(event, terminal) {
+            if ((event.which || event.keyCode) === 9) {
+                completeTerminalInput(terminal);
+                return false;
+            }
+        }
     });
 
     window._term = term;

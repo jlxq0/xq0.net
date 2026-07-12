@@ -130,8 +130,30 @@ test("live announcements are scoped to output rather than the command editor", (
 });
 
 test("Tab completes terminal commands", () => {
-  assert.match(applicationSource, /tabcompletion: true/);
-  assert.match(applicationSource, /completion: completeCommand/);
+  const completion = sourceFunction("completeTerminalInput");
+  assert.match(applicationSource, /\(event\.which \|\| event\.keyCode\) === 9/);
+  assert.match(applicationSource, /completeTerminalInput\(terminal\)/);
+  assert.match(completion, /term\.get_command\(\)/);
+  assert.match(completion, /term\.set_command\(/);
+  assert.match(applicationSource, /'numbers\.dat'/);
+
+  const context = {
+    $: { grep: (items, predicate) => items.filter(predicate) },
+    COMPLETIONS: ["help", "numbers.dat", "readme.txt", "./please-execute"]
+  };
+  vm.runInNewContext(`${completion}; this.completeTerminalInput = completeTerminalInput;`, context);
+  for (const [input, expected] of [
+    ["he", "help"],
+    ["cat num", "cat numbers.dat"],
+    ["./ple", "./please-execute"]
+  ]) {
+    let result = input;
+    context.completeTerminalInput({
+      get_command: () => input,
+      set_command: (value) => { result = value; }
+    });
+    assert.equal(result, expected);
+  }
 });
 
 test("the progressive dossier contains every canonical project and contact", () => {
@@ -193,9 +215,10 @@ test("security headers allow only the intended client-side uplinks", () => {
 
 test("chat uses one consent gate and the direct WebLLM engine", () => {
   assert.match(applicationSource, /chatState = 'awaiting-consent'/);
-  assert.match(applicationSource, /Download and run it\? \[y\/n\]/);
+  assert.match(applicationSource, /Continue\? \[y\/n\]/);
   assert.match(applicationSource, /CreateMLCEngine\(chatModelId/);
   assert.doesNotMatch(applicationSource, /awaiting-fallback|CHAT_WORKER|CreateWebWorkerMLCEngine|requestAdapter\(\)/);
+  assert.doesNotMatch(sourceFunction("offerChat"), /Qwen|GB|CHAT_MODEL/);
 });
 
 test("the visible console starts at the original prompt without a greeting block", () => {
@@ -205,8 +228,7 @@ test("the visible console starts at the original prompt without a greeting block
 });
 
 test("Tab completion and the executable easter egg are functional", () => {
-  assert.match(applicationSource, /tabcompletion: true/);
-  assert.match(applicationSource, /completion: completeCommand/);
+  assert.match(applicationSource, /function completeTerminalInput\(term\)/);
   assert.match(applicationSource, /'\.\/please-execute'/);
   assert.match(applicationSource, /function runPleaseExecute\(term\)/);
   assert.match(applicationSource, /term\.pause\(\)[\s\S]*term\.resume\(\)/);
