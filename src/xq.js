@@ -77,25 +77,8 @@ jQuery(document).ready(function($) {
     function renderPrivacy(term) {
         term.echo('This is a static site with no analytics or chat backend.');
         term.echo('After you agree to the download, chat runs locally in your browser.');
-        term.echo('Recognized commands may be saved for arrow-key recall; questions are not.');
-        term.echo('Use "history clear" to remove saved commands.');
-    }
-
-    function rememberCommand(command) {
-        var lower = String(command || '').toLowerCase().trim();
-        return /^(?:help|\?|about|whoami|contact|privacy|projects|map|explore|posts|now|clear|cls|history clear)$/.test(lower) ||
-            /^(?:project|find|search|open|theme)\s+[a-z0-9-]+$/.test(lower) ||
-            /^(?:ls|ll|la|dir)(?:\s+projects)?$/.test(lower);
-    }
-
-    function sanitizeStoredHistory(term) {
-        var history = term.history();
-        if (!history || !history.data) return;
-        var saved = history.data().slice(0);
-        var safe = $.grep(saved, rememberCommand);
-        if (safe.length === saved.length) return;
-        history.clear();
-        $.each(safe, function(i, command) { history.append(command); });
+        term.echo('Submitted lines are saved locally for arrow-key recall.');
+        term.echo('Use "history clear" to remove them.');
     }
 
     function profileRecords(question) {
@@ -947,7 +930,6 @@ jQuery(document).ready(function($) {
         name: 'lindner',
         greetings: null,
         history: true,
-        historyFilter: rememberCommand,
         onBlur: function() { return false; },
         keydown: function(event, terminal) {
             if ((event.which || event.keyCode) === 9) {
@@ -958,7 +940,6 @@ jQuery(document).ready(function($) {
     });
 
     window._term = term;
-    sanitizeStoredHistory(term);
     $('#term > .terminal-output').attr({
         id: 'terminal-log',
         role: 'log',

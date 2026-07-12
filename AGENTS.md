@@ -17,6 +17,7 @@
 - jQuery Terminal conflates outside-click blur with an intentional pause. Keep `onBlur` returning `false`, stop quick-command click propagation, and never restore focus when `term.paused()` was already true or a model generation can be interrupted.
 - Never put `aria-live` on `#term`; the command editor mutates on every keystroke. Scope live/log semantics to the generated `.terminal-output` element only.
 - The legacy plugin's optional `tabcompletion` callback did not work reliably in the deployed terminal. Keep the explicit key-9 handler that completes the final token through `get_command()` and `set_command()`.
+- Do not filter terminal history by command type. Arrow-up recall must include free-form chat questions as well as built-in commands; `history clear` remains the explicit removal mechanism.
 - The plugin generates an otherwise unlabeled `.clipboard` textarea. Keep its command-input label and description/output relationships when changing terminal initialization.
 - Keep `#term` programmatically focusable (`tabindex="-1"`) so the skip link moves keyboard focus, not only the viewport.
 - WebLLM's npm version is fixed, but its default model and WASM config uses upstream-managed `main` URLs. Do not call model binaries pinned unless custom immutable revisions or self-hosted hashes are actually configured.

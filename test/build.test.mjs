@@ -239,17 +239,10 @@ test("chat cannot be disabled or persisted across tab sessions", () => {
   assert.doesNotMatch(applicationSource, /xq_chat/);
 });
 
-test("free-form questions are excluded from persistent terminal history", () => {
-  const remember = sourceFunction("rememberCommand");
-  const sanitize = sourceFunction("sanitizeStoredHistory");
-
-  assert.match(remember, /help/);
-  assert.match(remember, /history clear/);
-  assert.match(applicationSource, /historyFilter: rememberCommand/);
+test("arrow-key history includes chat questions", () => {
+  assert.match(applicationSource, /history: true/);
   assert.match(applicationSource, /term\.history\(\)\.clear\(\)/);
-  assert.match(sanitize, /\$\.grep\(saved, rememberCommand\)/);
-  assert.match(applicationSource, /sanitizeStoredHistory\(term\)/);
-  assert.doesNotMatch(remember, /chat/);
+  assert.doesNotMatch(applicationSource, /historyFilter|rememberCommand|sanitizeStoredHistory/);
 });
 
 test("the privacy command stays concise and accurate", () => {
@@ -257,6 +250,7 @@ test("the privacy command stays concise and accurate", () => {
 
   assert.match(privacy, /static site with no analytics or chat backend/);
   assert.match(privacy, /runs locally in your browser/);
+  assert.match(privacy, /Submitted lines are saved locally/);
   assert.match(privacy, /history clear/);
   assert.doesNotMatch(privacy, /DHARMA|LOCAL OPERATION|Public file:/);
 });
