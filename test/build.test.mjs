@@ -198,12 +198,10 @@ test("chat uses one consent gate and the direct WebLLM engine", () => {
   assert.doesNotMatch(applicationSource, /awaiting-fallback|CHAT_WORKER|CreateWebWorkerMLCEngine|requestAdapter\(\)/);
 });
 
-test("chat keeps the original WebLLM system prompt", () => {
-  assert.match(applicationSource, /Persona: a dry-witted, slightly cryptic 1980s station computer/);
-  assert.match(applicationSource, /Keep replies short: one to four lines/);
-  assert.match(applicationSource, /Facts about Julian \(your ONLY source of truth about him/);
-  assert.match(applicationSource, /Island protocol:/);
-  assert.doesNotMatch(applicationSource, /HARD RULES about this terminal|REFERENCE RECORDS|SEED_HISTORY|CURRENT STATE:/);
+test("the visible console starts at the original prompt without a greeting block", () => {
+  assert.match(applicationSource, /prompt: '>: '/);
+  assert.match(applicationSource, /greetings: null/);
+  assert.doesNotMatch(applicationSource, /DHARMA INITIATIVE \/\/ SWAN PERSONNEL ARCHIVE|Type "help" to begin/);
 });
 
 test("Tab completion and the executable easter egg are functional", () => {
