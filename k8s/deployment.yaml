@@ -36,7 +36,7 @@ spec:
       containers:
         - name: caddy
           # CI self-bumps this to :<sha> on push (see .forgejo/workflows/docker.yaml)
-          image: forge.oddie.app/jlxq0/lindner_web:7f9c725
+          image: forge.oddie.app/jlxq0/lindner_web:36a5ab5
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 8080 }
