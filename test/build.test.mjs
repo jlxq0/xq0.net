@@ -17,7 +17,6 @@ const requiredRuntimeFiles = [
   "css/jquery.terminal.css",
   "favicon.svg",
   "index.html",
-  "js/chat-worker.js",
   "js/jquery-1.7.1.min.js",
   "js/jquery.terminal-min.js",
   "js/profile.js",
@@ -130,9 +129,9 @@ test("live announcements are scoped to output rather than the command editor", (
   assert.match(applicationSource, /'aria-controls': 'terminal-log'/);
 });
 
-test("Tab and Shift+Tab can leave the legacy terminal editor", () => {
-  assert.match(applicationSource, /keydown: function\(event\)/);
-  assert.match(applicationSource, /\(event\.which \|\| event\.keyCode\) === 9\) return true/);
+test("Tab completes terminal commands", () => {
+  assert.match(applicationSource, /tabcompletion: true/);
+  assert.match(applicationSource, /completion: completeCommand/);
 });
 
 test("the progressive dossier contains every canonical project and contact", () => {
@@ -192,34 +191,19 @@ test("security headers allow only the intended client-side uplinks", () => {
   assert.doesNotMatch(caddyfile, /'unsafe-inline'|'unsafe-eval'/);
 });
 
-test("persistent worker failures invalidate the active chat attempt", () => {
-  const fatal = sourceFunction("handleWorkerFatal");
-
-  assert.match(fatal, /var wasGenerating = chatState === 'generating';/);
-  assert.match(fatal, /chatAttempt\+\+;/);
-  assert.match(fatal, /chatEngine = null;/);
-  assert.match(fatal, /chatState = 'failed';/);
-  assert.match(fatal, /if \(wasGenerating\)[\s\S]*term\.resume\(\)/);
-
-  assert.match(
-    applicationSource,
-    /addEventListener\('error',[\s\S]*?if \(workerActivated\) handleWorkerFatal\(term, attempt, error\)/
-  );
-  assert.match(
-    applicationSource,
-    /addEventListener\('messageerror',[\s\S]*?if \(workerActivated\) handleWorkerFatal\(term, attempt, error\)/
-  );
+test("chat uses one consent gate and the direct WebLLM engine", () => {
+  assert.match(applicationSource, /chatState = 'awaiting-consent'/);
+  assert.match(applicationSource, /Download and run it\? \[y\/n\]/);
+  assert.match(applicationSource, /CreateMLCEngine\(chatModelId/);
+  assert.doesNotMatch(applicationSource, /awaiting-fallback|CHAT_WORKER|CreateWebWorkerMLCEngine|requestAdapter\(\)/);
 });
 
-test("fallback wake-up always waits for explicit consent", () => {
-  const fallback = sourceFunction("offerFallback");
-  const consentPosition = fallback.indexOf("chatState = 'awaiting-fallback-consent'");
-  const cacheBranchPosition = fallback.indexOf("if (cached)");
-
-  assert.ok(consentPosition >= 0, "fallback must enter its consent state");
-  assert.ok(consentPosition < cacheBranchPosition, "cached fallback must still require consent");
-  assert.match(applicationSource, /offerFallback\(term, cached\)/);
-  assert.match(applicationSource, /offerFallback\(term, false\)/);
+test("Tab completion and the executable easter egg are functional", () => {
+  assert.match(applicationSource, /tabcompletion: true/);
+  assert.match(applicationSource, /completion: completeCommand/);
+  assert.match(applicationSource, /'\.\/please-execute'/);
+  assert.match(applicationSource, /function runPleaseExecute\(term\)/);
+  assert.match(applicationSource, /term\.pause\(\)[\s\S]*term\.resume\(\)/);
 });
 
 test("chat cannot be disabled or persisted across tab sessions", () => {

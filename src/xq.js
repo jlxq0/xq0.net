@@ -284,24 +284,12 @@ jQuery(document).ready(function($) {
     // The WebLLM package version is fixed; named model assets remain managed by
     // their public upstream hosts. Inference and chat history stay in this tab.
     var WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm@0.2.84';
-    var CHAT_WORKER_URL = './js/chat-worker.js';
-    var CHAT_MODELS = {
-        primary: {
-            id: 'Qwen3-4B-q4f16_1-MLC',
-            download: '2.28 GB',
-            gpuMemory: '3.43 GB',
-            label: 'primary core'
-        },
-        fallback: {
-            id: 'Qwen3-1.7B-q4f16_1-MLC',
-            download: '0.98 GB',
-            gpuMemory: '2.04 GB',
-            label: 'auxiliary core'
-        }
+    var CHAT_MODEL = {
+        id: 'Qwen3-4B-q4f16_1-MLC',
+        download: '2.28 GB'
     };
 
     var chatEngine = null;
-    var chatWorker = null;
     var chatModelId = null;
     var chatState = 'idle';
     var chatHistory = [];
@@ -311,6 +299,15 @@ jQuery(document).ready(function($) {
 
     var UNKNOWN_CMD = "Unknown command (try 'help').";
     var UNKNOWN_CMD_HINT = "Unknown command (try 'help', or 'chat' to wake what sleeps below).";
+    var COMPLETIONS = [
+        'help', 'about', 'contact', 'privacy', 'projects', 'project', 'find', 'open',
+        'map', 'posts', 'now', 'theme', 'chat', 'clear', 'history', 'ls', 'll', 'pwd',
+        'whoami', 'date', 'time', 'please-execute', './please-execute', 'cat numbers.dat'
+    ];
+    $.each(PROJECTS, function(i, project) {
+        COMPLETIONS.push(project.id);
+        COMPLETIONS.push('projects/' + project.id + '.dossier');
+    });
 
     var SYSTEM_PROMPT = [
         'You are the computer terminal of DHARMA Initiative Station 3, "The Swan" —',
@@ -372,43 +369,15 @@ jQuery(document).ready(function($) {
     function offerChat(term, question, viaCommand) {
         chatOffered = true;
         pendingQuestion = question || null;
-        chatState = 'awaiting-primary-consent';
-        if (viaCommand) {
-            term.echo('Something is sleeping beneath this station. No one has spoken to it');
-            term.echo('since the Incident.');
-        } else {
-            term.echo("That's not a protocol I recognize.");
-            term.echo('But something else is down here. The Initiative left it sleeping');
-            term.echo('beneath this station. No one has spoken to it since the Incident.');
-        }
-        term.echo('The primary core is a ' + CHAT_MODELS.primary.download + ' model download and needs');
-        term.echo('about ' + CHAT_MODELS.primary.gpuMemory + ' of graphics memory. Cached files are reused.');
-        term.echo('Your words stay on this device; runtime and model fetches still contact');
-        term.echo('the uplink.');
-        term.echo('Wake it? [y/n]');
+        chatState = 'awaiting-consent';
+        if (!viaCommand) term.echo("That's not a command I recognize.");
+        term.echo('Chat uses Qwen3 4B locally in this browser. The first run downloads');
+        term.echo('about ' + CHAT_MODEL.download + '; cached files are reused. Prompts stay on this device.');
+        term.echo('Download and run it? [y/n]');
     }
 
     function wakeOrOffer(term, question, viaCommand) {
         offerChat(term, question, viaCommand);
-    }
-
-    function offerFallback(term, cached) {
-        chatState = 'awaiting-fallback-consent';
-        term.echo('The primary core did not wake. An auxiliary core remains below.');
-        if (cached) {
-            term.echo('Its model is already cached; no new model download is required.');
-        } else {
-            term.echo('It is a ' + CHAT_MODELS.fallback.download + ' model download.');
-        }
-        term.echo('It needs about ' + CHAT_MODELS.fallback.gpuMemory + ' of graphics memory.');
-        term.echo('Wake the auxiliary core? [y/n]');
-    }
-
-    function stopWorker() {
-        if (chatWorker) {
-            try { chatWorker.terminate(); } catch (e) {}
-            chatWorker = null;
-        }
     }
 
     function importWebLLM() {
@@ -419,93 +388,30 @@ jQuery(document).ready(function($) {
         return err && err.message ? err.message : String(err || 'unknown failure');
     }
 
-    function handleWorkerFatal(term, attempt, err) {
-        if (attempt !== chatAttempt) return;
-        var wasGenerating = chatState === 'generating';
-        chatAttempt++;
-        chatEngine = null;
-        chatModelId = null;
-        stopWorker();
-        chatState = 'failed';
-        term.echo('Core signal lost: ' + chatFailureText(err));
-        term.echo('Manual controls remain available. Type "chat" to retry.');
-        if (wasGenerating) {
-            try { term.resume(); } catch (e) {}
-        }
-    }
-
-    function handleLoadFailure(term, model, err, webllm, attempt) {
-        if (attempt !== chatAttempt) return;
-        stopWorker();
-        term.echo('Wake sequence failed: ' + chatFailureText(err));
-
-        if (model === CHAT_MODELS.primary) {
-            webllm.hasModelInCache(CHAT_MODELS.fallback.id, webllm.prebuiltAppConfig).then(function(cached) {
-                if (attempt !== chatAttempt) return;
-                offerFallback(term, cached);
-            }, function() {
-                if (attempt === chatAttempt) offerFallback(term, false);
-            });
-            return;
-        }
-
-        chatState = 'failed';
-        term.echo('Both cores remain dark. Manual station controls are still available.');
-    }
-
-    function initChat(term, model) {
-        if (chatState === 'loading-primary' || chatState === 'loading-fallback' || chatState === 'ready') return;
+    function initChat(term) {
+        if (chatState === 'loading' || chatState === 'ready') return;
         var attempt = ++chatAttempt;
-        chatState = model === CHAT_MODELS.primary ? 'preflighting' : 'loading-fallback';
-        term.echo('Beginning ' + model.label + ' wake sequence. Do not leave the hatch.');
+        chatState = 'loading';
+        term.echo('Loading Qwen3 4B. Keep this tab open.');
         var lastPct = -1;
-        var loadedWebLLM = null;
-
-        navigator.gpu.requestAdapter().then(function(adapter) {
+        importWebLLM().then(function(webllm) {
             if (attempt !== chatAttempt) throw new Error('stale wake sequence');
-            if (!adapter) throw new Error('WebGPU adapter unavailable');
-            chatState = model === CHAT_MODELS.primary ? 'loading-primary' : 'loading-fallback';
-            return importWebLLM();
-        }).then(function(webllm) {
-            if (attempt !== chatAttempt) throw new Error('stale wake sequence');
-            loadedWebLLM = webllm;
-            chatModelId = model.id;
-            chatWorker = new Worker(CHAT_WORKER_URL, { type: 'module', name: 'swan-core' });
-            var workerActivated = false;
-            var rejectInitialWorker = null;
-            var workerFailed = new Promise(function(resolve, reject) {
-                rejectInitialWorker = reject;
-            });
-            chatWorker.addEventListener('error', function(e) {
-                var error = new Error(e.message || 'worker failed to load');
-                if (workerActivated) handleWorkerFatal(term, attempt, error);
-                else rejectInitialWorker(error);
-            });
-            chatWorker.addEventListener('messageerror', function() {
-                var error = new Error('worker message could not be decoded');
-                if (workerActivated) handleWorkerFatal(term, attempt, error);
-                else rejectInitialWorker(error);
-            });
-            var engineReady = webllm.CreateWebWorkerMLCEngine(chatWorker, chatModelId, {
+            chatModelId = CHAT_MODEL.id;
+            return webllm.CreateMLCEngine(chatModelId, {
                 initProgressCallback: function(p) {
                     if (attempt !== chatAttempt) return;
-                    var pct = Math.floor((p.progress || 0) * 20) * 5;
+                    var pct = Math.floor((p.progress || 0) * 10) * 10;
                     if (pct !== lastPct) {
                         lastPct = pct;
-                        var phase = /fetch/i.test(p.text || '') ? 'uplink' : 'waking';
-                        term.echo('  [' + phase + '] ' + pct + '%');
+                        term.echo('  ' + pct + '%');
                     }
                 }
-            });
-            return Promise.race([engineReady, workerFailed]).then(function(engine) {
-                workerActivated = true;
-                return engine;
             });
         }).then(function(engine) {
             if (attempt !== chatAttempt) return;
             chatEngine = engine;
             chatState = 'ready';
-            term.echo("It's awake. Say something.");
+            term.echo('Ready. Ask anything.');
             if (pendingQuestion) {
                 var q = pendingQuestion;
                 pendingQuestion = null;
@@ -513,14 +419,9 @@ jQuery(document).ready(function($) {
             }
         }, function(err) {
             if (attempt !== chatAttempt) return;
-            if (!loadedWebLLM) {
-                stopWorker();
-                chatState = 'failed';
-                term.echo('Wake sequence failed: ' + chatFailureText(err));
-                term.echo('The station returns to manual operation. Type "chat" to retry.');
-                return;
-            }
-            handleLoadFailure(term, model, err, loadedWebLLM, attempt);
+            chatState = 'failed';
+            term.echo('Chat failed to load: ' + chatFailureText(err));
+            term.echo('Type "chat" to retry.');
         });
     }
 
@@ -634,13 +535,42 @@ jQuery(document).ready(function($) {
         }
         if (chatState === 'ready')      { askChat(cmd, term); return; }
         if (chatState === 'generating') { term.echo('Still processing the previous transmission.'); return; }
-        if (/^(preflighting|loading-)/.test(chatState)) {
+        if (chatState === 'loading') {
             pendingQuestion = cmd;
             term.echo('Still waking. It dreams slowly.');
             return;
         }
         if (chatOffered)                { term.echo(UNKNOWN_CMD_HINT); return; }
         wakeOrOffer(term, cmd, false);
+    }
+
+    function completeCommand(term, fragment, callback) {
+        callback(COMPLETIONS);
+    }
+
+    function runPleaseExecute(term) {
+        var frames = [
+            '[          ]',
+            '[==        ]',
+            '[====      ]',
+            '[======    ]',
+            '[========  ]',
+            '[==========]'
+        ];
+        term.pause();
+        term.echo('EXECUTING /usr/local/bin/please-execute');
+        $.each(frames, function(i, frame) {
+            setTimeout(function() {
+                term.echo(frame);
+                if (i === frames.length - 1) {
+                    term.echo('');
+                    term.echo('      4   8   15   16   23   42');
+                    term.echo('');
+                    term.echo('Sequence recovered. Enter it when needed.');
+                    term.resume();
+                }
+            }, i * 140);
+        });
     }
 
     // ---------- let browser shortcuts (cmd+L, cmd+T, cmd+R, etc.) pass through ----------
@@ -675,8 +605,8 @@ jQuery(document).ready(function($) {
         }
 
         // ---- pending chat consent ----
-        if (chatState === 'awaiting-primary-consent') {
-            if (lower === 'y' || lower === 'yes') { initChat(term, CHAT_MODELS.primary); return; }
+        if (chatState === 'awaiting-consent') {
+            if (lower === 'y' || lower === 'yes') { initChat(term); return; }
             if (lower === 'n' || lower === 'no') {
                 chatState = 'idle';
                 pendingQuestion = null;
@@ -688,18 +618,6 @@ jQuery(document).ready(function($) {
             pendingQuestion = null;
         }
 
-        if (chatState === 'awaiting-fallback-consent') {
-            if (lower === 'y' || lower === 'yes') { initChat(term, CHAT_MODELS.fallback); return; }
-            if (lower === 'n' || lower === 'no') {
-                chatState = 'failed';
-                pendingQuestion = null;
-                term.echo('The auxiliary core remains dark. Manual controls remain available.');
-                return;
-            }
-            chatState = 'failed';
-            pendingQuestion = null;
-        }
-
         // ---- chat control ----
         if (lower === 'chat' || lower === 'chat on') {
             if (!hasWebGPU()) {
@@ -708,9 +626,9 @@ jQuery(document).ready(function($) {
                 return;
             }
             if (chatState === 'ready')      { term.echo("It's already awake. Just type."); return; }
-            if (/^(preflighting|loading-)/.test(chatState)) { term.echo('Still waking. It dreams slowly.'); return; }
+            if (chatState === 'loading') { term.echo('The model is still loading.'); return; }
             if (chatState === 'generating') { term.echo('Busy. One transmission at a time.'); return; }
-            if (/^awaiting-/.test(chatState)) { term.echo('The station is waiting for y or n.'); return; }
+            if (chatState === 'awaiting-consent') { term.echo('Please answer y or n.'); return; }
             chatState = 'idle';
             wakeOrOffer(term, null, true);
             return;
@@ -976,6 +894,11 @@ jQuery(document).ready(function($) {
             return;
         }
 
+        if (lower === './please-execute' || lower === 'please-execute') {
+            runPleaseExecute(term);
+            return;
+        }
+
         if (lower.charAt(0) === '.' && lower.charAt(1) === '/') {
             term.echo('Permission denied: not executable.');
             return;
@@ -1017,10 +940,10 @@ jQuery(document).ready(function($) {
         ].join('\n'),
         history: true,
         historyFilter: rememberCommand,
+        tabcompletion: true,
+        completion: completeCommand,
         onBlur: function() { return false; },
-        keydown: function(event) {
-            if ((event.which || event.keyCode) === 9) return true;
-        }
+        keydown: function() {}
     });
 
     window._term = term;
