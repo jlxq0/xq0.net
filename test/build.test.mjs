@@ -98,6 +98,14 @@ test("the page does not add a persistent command rail", () => {
   assert.match(applicationSource, /onBlur: function\(\) \{ return false; \}/);
 });
 
+test("the terminal is not hidden behind a boot screen", () => {
+  const html = readFileSync(resolve(root, "index.html"), "utf8");
+  const css = readFileSync(resolve(root, "css/crt.css"), "utf8");
+
+  assert.doesNotMatch(html, /boot-sequence|ENTER THE SWAN/);
+  assert.doesNotMatch(css, /boot-sequence|boot-release|boot-line/);
+});
+
 test("live announcements are scoped to output rather than the command editor", () => {
   const html = readFileSync(resolve(root, "index.html"), "utf8");
   const termTag = html.match(/<main id="term"[^>]*>/);

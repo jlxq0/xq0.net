@@ -359,56 +359,6 @@ a:focus-visible,
   50% { opacity: 0; }
 }
 
-/* ---- short boot handoff ---- */
-.boot-sequence {
-  display: grid;
-  background:
-    radial-gradient(circle at center, var(--crt-bloom), transparent 58%),
-    var(--crt-bg);
-  inset: 0;
-  place-items: center;
-  pointer-events: none;
-  position: fixed;
-  z-index: 10000;
-  animation: boot-release 180ms linear 1.9s forwards;
-}
-
-.boot-sequence__readout {
-  width: min(30rem, calc(100vw - 3rem));
-  padding: 1.25rem 0;
-  border-block: 1px solid var(--crt-border);
-  color: var(--crt-dim);
-  font-size: clamp(0.7rem, 2.7vw, 0.86rem);
-  letter-spacing: 0.08em;
-  line-height: 1.9;
-  text-shadow: 0 0 8px var(--crt-glow);
-}
-
-.boot-sequence__readout span,
-.boot-sequence__readout strong {
-  display: block;
-  opacity: 0;
-  animation: boot-line 120ms steps(2, end) forwards;
-}
-
-.boot-sequence__readout span:nth-child(1) { animation-delay: 120ms; }
-.boot-sequence__readout span:nth-child(2) { animation-delay: 480ms; }
-.boot-sequence__readout span:nth-child(3) { animation-delay: 840ms; }
-.boot-sequence__readout strong {
-  margin-top: 0.6rem;
-  color: var(--crt-fg);
-  animation-delay: 1.25s;
-}
-
-@keyframes boot-line {
-  from { opacity: 0; transform: translateY(0.25rem); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes boot-release {
-  to { opacity: 0; visibility: hidden; }
-}
-
 /* ---- scanlines and restrained flicker ---- */
 body::before {
   content: "";
@@ -524,9 +474,6 @@ body.system-failure #countdown {
 }
 
 @media (max-height: 520px) {
-  .boot-sequence {
-    display: none;
-  }
 
   #term.terminal {
     padding-top: max(0.8rem, env(safe-area-inset-top));
@@ -549,17 +496,11 @@ body.system-failure #countdown {
     transition-duration: 0.01ms !important;
   }
 
-  .boot-sequence {
-    display: none;
-  }
 }
 
 @media (forced-colors: active) {
   body::before,
   body::after,
-  .boot-sequence {
-    display: none;
-  }
 
   .project-grid,
   .project-grid li {
@@ -579,7 +520,6 @@ body.system-failure #countdown {
 
   body::before,
   body::after,
-  .boot-sequence,
   #countdown,
   .terminal-output,
   .cmd {
