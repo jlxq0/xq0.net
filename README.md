@@ -9,9 +9,9 @@ host is `lindner.earth`.
 It was consolidated there on 2026-07-12. The `k8s/` manifests and the
 `.forgejo/workflows/docker.yaml` push-to-deploy pipeline that described the
 superseded deployment were removed on 2026-08-26; `Dockerfile` and `Caddyfile`
-remain and nothing builds them. The copy of `index.html` in this tree is behind
-the deployed one. Read the note at the top of `AGENTS.md` before building or
-copying anything out of here.
+remain and nothing builds them. Every runtime file here is byte-identical to the
+deployed copy as of 2026-08-26, but nothing keeps them that way. Read the note at
+the top of `AGENTS.md` before building or copying anything out of here.
 
 ## Development
 

@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
     <title>Julian Lindner | Builder in Singapore</title>
+
+    <!-- Self-hosted Plausible (stats.oddie.app). Cookie-free and stores no
+         personal data, so no consent banner is required.
+         ★ data-domain must match a Plausible site EXACTLY or every event is
+         discarded server-side, silently — the page shows no error. Registered
+         under the apex so apex and www aggregate into one property.
+         ★ This host's CSP is stricter than www.oddie.app's (it carries a
+         script hash plus esm.run/jsdelivr for the terminal), so stats.oddie.app
+         had to be added to BOTH script-src and connect-src in the edge
+         Caddyfile. script-src alone loads the file but every event it sends is
+         then blocked by connect-src, which looks exactly like "no visitors". -->
+    <script defer data-domain="lindner.earth" src="https://stats.oddie.app/js/script.js"></script>
     <meta name="description" content="Julian Lindner is a Singapore-based founder and technologist working across Microsoft 365, AI, communities, products, and open-source infrastructure.">
     <meta name="author" content="Julian Lindner">
     <meta name="theme-color" content="#000800">
@@ -29,8 +41,8 @@
     <meta name="twitter:title" content="Julian Lindner | Builder in Singapore">
     <meta name="twitter:description" content="Products, communities, open-source infrastructure, and one unusually persistent island terminal.">
 
-    <link href="./css/jquery.terminal.css" rel="stylesheet">
-    <link href="./css/crt.css" rel="stylesheet">
+    <link href="./css/jquery.terminal.css?v=1" rel="stylesheet">
+    <link href="./css/crt.css?v=1" rel="stylesheet">
 
     <script type="application/ld+json">
       {
@@ -69,10 +81,10 @@
       }
     </script>
 
-    <script src="./js/jquery-1.7.1.min.js" defer></script>
-    <script src="./js/jquery.terminal-min.js" defer></script>
-    <script src="./js/profile.js" defer></script>
-    <script src="./js/xq.js" defer></script>
+    <script src="./js/jquery-1.7.1.min.js?v=1" defer></script>
+    <script src="./js/jquery.terminal-min.js?v=1" defer></script>
+    <script src="./js/profile.js?v=1" defer></script>
+    <script src="./js/xq.js?v=1" defer></script>
   </head>
   <body class="theme-dharma">
     <a class="skip-link" href="#term">Skip to site content</a>

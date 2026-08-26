@@ -98,7 +98,7 @@ test("the page loads only the generated application bundle", () => {
   const profilePosition = html.indexOf('./js/profile.js');
   const bundlePosition = html.indexOf('./js/xq.js');
 
-  assert.match(html, /<script\s+src=["']\.\/js\/xq\.js["']/);
+  assert.match(html, /<script\s+src=["']\.\/js\/xq\.js(?:\?v=\d+)?["']/);
   assert.doesNotMatch(html, /src\/xq\.js|_xq_unscrambled\.js/);
   assert.ok(profilePosition >= 0, "index.html must load js/profile.js");
   assert.ok(profilePosition < bundlePosition, "profile data must load before js/xq.js");
@@ -226,6 +226,56 @@ test("security headers allow only the intended client-side uplinks", () => {
   assert.match(caddyfile, /https:\/\/huggingface\.co/);
   assert.match(caddyfile, /'wasm-unsafe-eval'/);
   assert.doesNotMatch(caddyfile, /'unsafe-inline'|'unsafe-eval'/);
+});
+
+function cspAllows(sourceList, url, selfOrigin) {
+  return sourceList.some((token) => {
+    if (token === "'self'") return url.origin === selfOrigin;
+    if (!/^(?:https?:\/\/|\*\.)/i.test(token)) return false;
+
+    const pattern = token.replace(/\/$/, "");
+    const wildcard = pattern.match(/^(https?:\/\/)?\*(\..+)$/i);
+
+    if (wildcard) {
+      const [, scheme, suffix] = wildcard;
+      if (scheme && url.protocol !== scheme.slice(0, -2)) return false;
+      return url.hostname.endsWith(suffix) && url.hostname !== suffix.slice(1);
+    }
+
+    try {
+      return new URL(pattern).origin === url.origin;
+    } catch {
+      return false;
+    }
+  });
+}
+
+test("every origin index.html loads from is allowed by the origin CSP", () => {
+  const html = readFileSync(resolve(root, "index.html"), "utf8");
+  const caddyfile = readFileSync(resolve(root, "Caddyfile"), "utf8");
+  const scriptSrc = caddyfile.match(/script-src ([^;"]*)[;"]/);
+  const canonical = html.match(/<link\s+rel="canonical"\s+href="([^"]+)"/);
+
+  assert.ok(scriptSrc, "Caddyfile must declare script-src");
+  assert.ok(canonical, "index.html must declare a canonical URL");
+
+  const sourceList = scriptSrc[1].trim().split(/\s+/);
+  const selfOrigin = new URL(canonical[1]).origin;
+  const loaded = [
+    ...html.matchAll(/<script\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)
+  ]
+    .map((match) => match[1] ?? match[2] ?? match[3])
+    .filter((value) => /^(?:https?:)?\/\//i.test(value))
+    .map((value) => new URL(value, selfOrigin));
+
+  assert.ok(loaded.length > 0, "index.html must load at least one absolute script");
+
+  for (const url of loaded) {
+    assert.ok(
+      cspAllows(sourceList, url, selfOrigin),
+      `script-src must allow ${url.origin}, which index.html loads`
+    );
+  }
 });
 
 test("chat uses one consent gate and the direct WebLLM engine", () => {
