@@ -6,11 +6,12 @@ The repository retains its `xq0.net` name for historical reasons. The canonical
 host is `lindner.earth`.
 
 **The site is served from `oddie-apps/static-sites`, not from this repository.**
-It was consolidated there on 2026-07-12; the `k8s/` manifests and the
-`.forgejo/workflows/docker.yaml` push-to-deploy pipeline here describe a
-deployment that no longer exists, and the copy of `index.html` in this tree is
-behind the deployed one. Read the note at the top of `AGENTS.md` before building
-or copying anything out of here.
+It was consolidated there on 2026-07-12. The `k8s/` manifests and the
+`.forgejo/workflows/docker.yaml` push-to-deploy pipeline that described the
+superseded deployment were removed on 2026-08-26; `Dockerfile` and `Caddyfile`
+remain and nothing builds them. The copy of `index.html` in this tree is behind
+the deployed one. Read the note at the top of `AGENTS.md` before building or
+copying anything out of here.
 
 ## Development
 
