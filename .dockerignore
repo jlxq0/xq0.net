@@ -1,6 +1,4 @@
 .git
-.forgejo
-k8s
 README.md
 .dockerignore
 node_modules

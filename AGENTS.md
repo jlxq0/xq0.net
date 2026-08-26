@@ -21,18 +21,20 @@ bytes; the deployed one is 9,516, and the difference is two changes made only in
 
 Overwriting the deployed copy with a build from this tree removes both, silently.
 
-Two more things in this tree describe a deployment that no longer exists:
+The push-to-deploy pipeline that used to sit here is gone, removed 2026-08-26.
+`k8s/` declared a `lindner-web` Deployment in namespace `web` that is not on the
+cluster, and `.forgejo/workflows/docker.yaml` built an image, pushed it, and
+committed a `chore(deploy)` tag bump back to `main` naming a tag nothing
+consumes. Both steps worked; there was nothing to roll out. The last time it ran
+was the merge of the pull request that documented it as dead, which built
+`lindner_web:449d90d` and wrote `a5afbae`.
 
-- **`k8s/`** declares a `lindner-web` Deployment in namespace `web`. It is not on
-  the cluster — `kubectl get deploy -n web` returns `static-sites` and nothing
-  else — and no ArgoCD Application references this repository.
-- **`.forgejo/workflows/docker.yaml`** is a complete push-to-deploy pipeline:
-  build the image, self-bump the tag in `k8s/deployment.yaml`, let ArgoCD roll it
-  out. The first two steps still work. The third has nothing to roll out. Pushing
-  content here builds an image, commits a tag bump to `main`, and changes nothing
-  anyone can see. The head commit of this repository is that self-bump, from
-  2026-07-12; the images are in the registry, all dated that day, deployed
-  nowhere.
+**Do not reintroduce either without an ArgoCD Application to consume them.**
+`kubectl get deploy -n web` returns `static-sites` and nothing else, and the only
+Application touching this site is `static-sites`, from `oddie-apps/static-sites`.
+`Dockerfile` and `Caddyfile` survive as the description of an origin nobody
+builds; the tests still hold them to the runtime allowlist and the CSP, and that
+CSP is not the one serving the site.
 
 Which copy should be authoritative is an open question — see the repository's
 issue. Until it is answered, **`static-sites` is what serves the site** and this
