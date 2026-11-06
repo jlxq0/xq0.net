@@ -261,14 +261,17 @@ test("every origin index.html loads from is allowed by the origin CSP", () => {
 
   const sourceList = scriptSrc[1].trim().split(/\s+/);
   const selfOrigin = new URL(canonical[1]).origin;
-  const loaded = [
+  const sources = [
     ...html.matchAll(/<script\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)
-  ]
-    .map((match) => match[1] ?? match[2] ?? match[3])
+  ].map((match) => match[1] ?? match[2] ?? match[3]);
+
+  // The page loads no absolute script today, so the loop below finds nothing. This
+  // is the control that says the extraction still works rather than matching nothing.
+  assert.ok(sources.length > 0, "index.html must load at least one script");
+
+  const loaded = sources
     .filter((value) => /^(?:https?:)?\/\//i.test(value))
     .map((value) => new URL(value, selfOrigin));
-
-  assert.ok(loaded.length > 0, "index.html must load at least one absolute script");
 
   for (const url of loaded) {
     assert.ok(
