@@ -8,18 +8,10 @@ repository was consolidated into it on 2026-07-12.
 
 As of 2026-08-26 every runtime file in this tree is byte-identical to the
 deployed copy. `index.html` was 8,638 bytes here against 9,516 live for six
-weeks; the two changes that made up the difference were brought back on that
-date, so the trap of building here and copying the result over the live copy is
-gone rather than documented:
-
-- the Plausible tag (`static-sites` `252859d`, 2026-08-12), `<script defer
-  data-domain="lindner.earth" src="https://stats.oddie.app/js/script.js">`.
-  `data-domain` must match a Plausible site exactly or every event is discarded
-  server-side with no visible error, and `stats.oddie.app` must appear in **both**
-  `script-src` and `connect-src`. With it in `script-src` alone the file loads and
-  `connect-src` then blocks every event it sends, which looks exactly like "no
-  visitors";
-- `?v=1` cache-busting on the css and js references (`599e711`, 2026-07-12).
+weeks; the changes that made up the difference were brought back on that date,
+so the trap of building here and copying the result over the live copy is gone
+rather than documented. One of them still stands: `?v=1` cache-busting on the
+css and js references (`599e711`, 2026-07-12).
 
 **They are two copies with no automation between them, so check before assuming
 they still agree.** `diff -r --brief` this directory against
